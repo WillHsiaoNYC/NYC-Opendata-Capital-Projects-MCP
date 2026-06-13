@@ -1,0 +1,33 @@
+[project]
+name = "od-cpd"
+version = "0.1.0"
+description = "Local MCP server over the NYC Capital Projects Dashboard datasets"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27",
+    "duckdb>=1.1",
+    "mcp[cli]>=1.2",
+    "typer>=0.12",
+    "openpyxl>=3.1",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+od-cpd = "od_cpd.cli:app"
+od-cpd-server = "od_cpd.server:main"
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/od_cpd"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = ["smoke: hits live Socrata; run manually"]

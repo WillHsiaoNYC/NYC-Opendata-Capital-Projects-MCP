@@ -1,0 +1,160 @@
+# Hand-curated PROGRAM/FACILITY taxonomy for the OD_CPD category resolver.
+#
+# Purpose: power "biggest <category> project", "<category> projects delayed", etc.,
+# so end users never re-discover that (e.g.) library projects are built by DDC/EDC
+# and named by branch, not by the word "library".
+#
+# WHY THIS EXISTS: the datasets carry no single "category" column. Program type is
+# *implicit*, encoded across three signals that drift out of sync:
+#   • ten_year_plan_category — the city's own ~100-value label (best signal, but
+#       coarse: libraries hide under "ESSENTIAL RECONSTRUCTION OF FACILITIES").
+#   • fms_id / budget_line prefix (LB/LN/LQ=library, HB/BR=bridge, WP/WM/SE=water…)
+#       — the STABLE key; survives budget-holder reassignment and branch naming.
+#   • sponsor_agency — WHOSE program it is (DDC/EDC/DCAS only *build* it); routes the
+#       generic/unlabeled remainder (e.g. "ROUTINE RECONSTRUCTION", "MISCELLANEOUS").
+#
+# CLASSIFY BY THE STABLE SIGNAL, NEVER BY managing_agency OR raw name. managing_agency
+# is the EXECUTOR/budget-holder and REASSIGNS over time (Seward Park library moved
+# NYPL→EDC between periods). Names are branch-named ("Seward Park", not "...Library").
+# Both undercount badly. Categories are derived at the fms_id grain ACROSS ALL HISTORY
+# (see `ever_managed_by`, computed in code by scanning every period).
+#
+# PRECEDENCE — each fms_id gets the FIRST match across three tiers, in this order:
+#   TIER 1  keyword/prefix on non-generic categories, in file order
+#           (`ten_year_any` | `fms_prefix` | `ever_managed_by`) — pinpoints a
+#           category regardless of agency.
+#   TIER 2  `sponsor_agencies` on ALL categories, in file order — routes generic or
+#           unlabeled lines by the sponsoring agency.
+#   TIER 3  keyword on `generic: true` categories — broad facility words; reached only
+#           if 1 & 2 miss. MUST rank below sponsor, else FDNY/DCAS/etc. facilities get
+#           swallowed by "building"/"facility" and the dept categories empty out.
+#   else    `other_label`.
+#
+# Match semantics: ten_year_any / generic keywords = case-insensitive substring on
+# ten_year_plan_category; fms_prefix = case-insensitive prefix on fms_id;
+# sponsor_agencies = exact match on sponsor_agency (CPDW acronym).
+#
+# COVERAGE (202601): 99.3% of total budget lands in a real category; ~0.7% ($1.17B,
+# 18 lines) stays in Other — the city's own undifferentiated "MISCELLANEOUS*" labels.
+#
+# AUDIT after a refresh: call list_categories (the tool) and eyeball the 'Other'
+# share; group raw_project_detail by ten_year_plan_category to spot any NEW city
+# label not covered by a keyword here. Golden classification cases (reassignment,
+# park-pedestrian-bridge, sponsor fallback) are guarded by tests/test_categories.py.
+
+categories:
+  - name: Library
+    fms_prefix: ["LB", "LN", "LQ"]
+    ever_managed_by: ["BPL", "NYPL", "QPL", "NYRL"]   # all-history scan-set; survives reassignment (Seward NYPL→EDC)
+    sponsor_agencies: ["BPL", "NYPL", "QPL", "NYRL"]  # tier-2 routing for generic/unlabeled lines
+    note: >-
+      Built mostly by DDC/EDC, named by branch — the prefix is the only reliable key.
+      Prior name/agency filters missed Seward Park (EDC-held) and Central Renovation
+      (DDC-held). 'L'-prefix (NYRL research) is caught via sponsor/ever-managed, not
+      fms_prefix (too short / collision-prone).
+
+  - name: Bridges
+    ten_year_any: ["bridge"]
+    fms_prefix: ["HB", "BR"]
+    note: >-
+      Includes 'Park Pedestrian Bridges' (a city ten-year label) — structurally
+      bridges, not parks (data-owner decision, 2026-06; reversed an earlier call
+      so a $1.9B BQE rehab no longer headlines "parks").
+
+  - name: Parks & Recreation
+    ten_year_any: ["park", "playground", "ballfield", "zoos", "recreational facilities"]
+    sponsor_agencies: ["DPR"]
+    note: >-
+      Listed AFTER Bridges so 'Park Pedestrian Bridges' route to Bridges. 'tree
+      planting'/'green infrastructure' keywords are deliberately OMITTED here and from
+      Sewer & Water: that label is shared by DPR (parks) and DEP (e.g. Tibbetts Brook
+      stormwater), so it routes by sponsor — DPR→Parks, DEP→Sewer & Water.
+
+  - name: Ferries & Waterfront
+    ten_year_any: ["ferry", "waterfront", "port develop"]
+    fms_prefix: ["FA"]
+
+  - name: Streets & Highways
+    ten_year_any: ["street", "resurfac", "pedestrian ramp", "sidewalk", "pavement",
+                   "lamppost", "luminaire", "signal", "traffic", "highway", "retaining wall"]
+    sponsor_agencies: ["DOT"]
+
+  - name: Sewer & Water
+    ten_year_any: ["water", "sewer", "bluebelt", "plant upgrad", "plant component",
+                   "filter", "filtration", "tunnel", "dam safety", "distribution main",
+                   "nutrient", "consent decree", "utility relocation"]
+    fms_prefix: ["WP", "WM", "SE", "EP", "PS", "OB", "PR"]
+    sponsor_agencies: ["DEP"]
+    note: >-
+      'plant upgrad'/'plant component' are spelled out (not bare 'plant') so they don't
+      swallow 'tree PLANTing'. 'green infrastructure' keyword omitted on purpose (see Parks
+      note) — DEP-sponsored green-infra (Tibbetts = CSO/stormwater relief) routes here via sponsor.
+
+  - name: Police
+    ten_year_any: ["police"]
+    fms_prefix: ["PO"]
+    sponsor_agencies: ["NYPD"]
+
+  - name: Jails & Correction
+    ten_year_any: ["jail", "correction"]
+    sponsor_agencies: ["DOC"]
+
+  - name: Courts
+    ten_year_any: ["court"]
+
+  - name: Homeless Shelters
+    ten_year_any: ["shelter", "homeless"]
+    sponsor_agencies: ["DHS"]
+
+  - name: Health & Hospitals
+    ten_year_any: ["hospital", "clinic", "medical", "ocme", "animal care"]
+    sponsor_agencies: ["DOHMH", "HHC"]
+
+  - name: Schools & Education
+    ten_year_any: ["school"]
+    sponsor_agencies: ["DOE", "SCA", "CUNY"]
+
+  - name: Cultural Institutions
+    ten_year_any: ["cultural", "museum"]
+    ever_managed_by: ["DCLA"]
+    sponsor_agencies: ["DCLA"]
+    note: >-
+      Owner-authoritative (like Library): any DCLA-sponsored/managed line → Cultural, so
+      DCLA cross-cutting work (e.g. energy retrofits at museums) rolls up here, not
+      Energy/Technology (data-owner decision, 2026-06: sponsor drives type for institutions).
+
+  - name: Housing
+    ten_year_any: ["housing"]
+    sponsor_agencies: ["HPD"]
+
+  - name: Social Services
+    ten_year_any: ["child welfare", "social service", "aging"]
+    sponsor_agencies: ["HRA", "ACS", "DFTA"]
+
+  - name: Economic Development
+    ten_year_any: ["industrial", "commercial", "market develop",
+                   "neighborhood revitaliz", "rail develop", "community develop"]
+    sponsor_agencies: ["EDC"]
+
+  - name: Sanitation
+    ten_year_any: ["garage", "solid waste"]
+    sponsor_agencies: ["DSNY"]
+
+  - name: Energy & Sustainability
+    ten_year_any: ["energy", "sustainab", "distributed generation", "electrical distribution"]
+
+  - name: Technology & Equipment
+    ten_year_any: ["data processing", "information technolog", "information system",
+                   "equipment", "surveillance", "election"]
+
+  - name: Fire & EMS
+    # No distinct ten-year label — FDNY work is labeled generically. Sponsor-only,
+    # which is exactly why TIER 3 (generic facility words) must rank below sponsor.
+    sponsor_agencies: ["FDNY"]
+
+  - name: City Buildings & Facilities
+    generic: true
+    ten_year_any: ["office space", "leased space", "city-owned", "facilit", "building"]
+    sponsor_agencies: ["DCAS"]
+
+other_label: "Other / Uncategorized"

@@ -1,0 +1,340 @@
+# Data dictionary for the NYC Capital Projects datasets.
+# Extracted ONCE (2026-06-08) from the dataset's attached
+# Capital_Projects_Dashboard_Data_Dictionary.xlsx (NYC Open Data, fb86-vt7u).
+# Static / curated — NOT refreshed with the data. Re-extract by hand on a version bump
+# (the source XLSX changes ~yearly; see its 'Dataset Revision History' sheet).
+# Keyed by our RAW table name -> column. Loaded into the column_dict table at build.
+
+raw_project_detail:
+  dataset: Capital Projects Dashboard - Budget and Schedule
+  socrata_id: fb86-vt7u
+  columns:
+    reporting_period:
+      display: Reporting Period
+      description: The year and the month the report is published (format YYYYMM). The dataset is updated
+        3 times a year following OMB’s commitment plan release date in Jan/May/Sep.
+      allowed_values: YYYYMM
+    managing_agency:
+      display: Managing Agency
+      description: Common acronym of the city agency that is responsible for managing the construction
+        and delivery of the capital project. This value is derived from the three digit managing agency
+        code.
+      allowed_values: The acronym of agencies.
+      notes: ACS = Administration for Children's Services BPL = Brooklyn Public Library CUNY = City
+        University of New York DCAS = Department of Citywide Administrative Services DCLA = Department
+        of Cultural Affairs DDC = Department of Design and Construction DEP = Department of Environmental
+        Protection DFTA = Department for the Aging DHS = Department of Homeless Services DOC = Department
+        of Correction DOHMH = Department of Health and Mental Hygiene DOT = Department of Transportation
+        DPR = Department of Parks and Recreation DSNY = Department of Sanitation EDC = Economic Development
+        Corporation FDNY = Fire Department HHC = Health and Hospitals Corporation HPD = Housing, Preservation,
+        and Development HRA = Human Resources Administration NYPD = Police Department NYPL = New York
+        Public Library NYRL OTI = Office of Technology and Innovation QPL = Queens Public Library
+    sponsor_agency:
+      display: Sponsor Agency
+      description: Common acronym of the city agency that the capital project is being managed on behalf
+        of. This value is derived from the three digit sponsor agency code. May include multiple agencies.
+      allowed_values: The acronym of agencies.
+      notes: ACS = Administration for Children's Services BOE = Board of Elections BPL = Brooklyn Public
+        Library CUNY = City University of New York DCAS = Department of Citywide Administrative Services
+        DCLA = Department of Cultural Affairs DCP = Department of City Planning DDC = Department of
+        Design and Construction DEP = Department of Environmental Protection DHS = Department of Homeless
+        Services DOC = Department of Correction DOHMH = Department of Health and Mental Hygiene DOT
+        = Department of Transportation DPR = Department of Parks and Recreation DSNY = Department of
+        Sanitation EDC = Economic Development Corporation FDNY = Fire Department H+H = Health and Hospitals
+        Corporation HHC = Health and Hospitals Corporation HPD = Housing, Preservation, and Development
+        HRA = Human Resources Administration MOCS = Mayor's Office of Contract Services MOR NYCHA =
+        New York City Housing Authority NYPD = Police Department NYPL = New York Public Library QPL
+        = Queens Public Library
+    pid:
+      display: PID
+      description: Unique identifier that represent a set of schedule managed by agency.
+      key: Foreign Key
+      allowed_values: Integer
+      notes: 'This is the unique identifier for an agency project. The PID and FMS ID have a many-to-many
+        relationship: a single agency project (PID) may be associated with multiple budget lines (FMS
+        IDs), and conversely, a single budget line may be linked to multiple agency projects.'
+    fms_id:
+      display: FMS ID
+      description: Unique identifier in the Financial Management System (FMS)
+      key: Foreign Key
+      allowed_values: A combination of letters, number digits and sometimes hyphen. Less than 12 characters
+        in total.
+    total_budget:
+      display: Total Budget
+      description: The total cost of the project, as reflected by "Commitments" in the City's Financial
+        Management System (FMS)
+      allowed_values: Dollar amount
+    spend_to_date:
+      display: Spend to Date
+      description: The amount of money spent to date, as reflected by "Liquidations" in the City's Financial
+        Management System (FMS)
+      allowed_values: Dollar amount
+    spend_to_date_1:
+      display: Spend to Date (%)
+      description: The amount of money spent to date, as reflected by "Liquidations" in the City's Financial
+        Management System (FMS) shown as a percentage of Total Budget (%).
+      allowed_values: Percentage with two decimal places
+    fms_project_name:
+      display: FMS Project Name
+      description: The name of the project in the Financial Management System (FMS)
+      allowed_values: Long English description
+      limitations: This field may be blank if the information was not entered in the FMS.
+    agency_project_name:
+      display: Agency Project Name
+      description: The name of the project in the managing agency's project management system
+      allowed_values: Long English description
+      limitations: This field may be blank if the information was not provided by the agency.
+    agency_project_description:
+      display: Agency Project Description
+      description: The short description of the capital project as described by the Sponsor Agency
+      allowed_values: Long English description
+      limitations: This field may be blank if the information was not provided by the agency.
+    current_phase:
+      display: Current Phase
+      description: 'The phase the project is in: Pre-Design, Design, Construction Procurement, Construction,
+        or Close-out'
+      allowed_values: 'The standard phases are: Pre-Design / Design / Construction Procurement / Construction
+        / Close Out. In this column, the use of parentheses indicates the rationale for deviations,
+        providing an explanation as to why the project does not conform to the standard phase.'
+      notes: () = the project is not yet in a standard phase (Cancelled) (Completed) (Consultant Services)
+        (Equipment) (Lump Sum) = the schedule is not required to be reported because it’s not managed
+        by a mayoral agency (On-Hold) (Partner-managed) (Pending) = the agency has not yet provided
+        the information (Pre-design) (Property Acquisition) (Transferred) Construction Construction
+        Procurement Design
+    current_phase_start:
+      display: Current Phase Start
+      description: The date when the current phase of the project began
+      allowed_values: Date (MM/DD/YYYY)
+      limitations: This field may be empty if the project has not reached the milestone described (i.e.
+        start, end) or if the agency did not provide such information in their submission to Operations.
+    forecast_current_phase_end:
+      display: Forecast Current Phase End
+      description: The date when the current phase of the project is expected to be completed
+      allowed_values: Date (MM/DD/YYYY)
+      limitations: This field may be empty if the project has not reached the milestone described (i.e.
+        start, end) or if the agency did not provide such information in their submission to Operations.
+    forecast_completion:
+      display: Forecast Completion
+      description: The date when the entire project is expected to be completed
+      allowed_values: Date (MM/DD/YYYY)
+      limitations: This field may be empty if the project has not reached the milestone described (i.e.
+        start, end) or if the agency did not provide such information in their submission to Operations.
+    actual_design_start:
+      display: Actual Design Start
+      description: The date when the design phase started (when the project started/became active)
+      allowed_values: Date (MM/DD/YYYY)
+      limitations: This field may be empty if the project has not reached the milestone described (i.e.
+        start, end) or if the agency did not provide such information in their submission to Operations.
+    actual_design_end:
+      display: Actual Design End
+      description: The date when the design phase was completed
+      allowed_values: Date (MM/DD/YYYY)
+      limitations: This field may be empty if the project has not reached the milestone described (i.e.
+        start, end) or if the agency did not provide such information in their submission to Operations.
+    actual_construction:
+      display: Actual Construction Procurement Start
+      description: The date when the construction procurement phase started
+      allowed_values: Date (MM/DD/YYYY)
+      limitations: This field may be empty if the project has not reached the milestone described (i.e.
+        start, end) or if the agency did not provide such information in their submission to Operations.
+    actual_construction_1:
+      display: Actual Construction Procurement End
+      description: The date when the construction procurement phase was completed
+      allowed_values: Date (MM/DD/YYYY)
+      limitations: This field may be empty if the project has not reached the milestone described (i.e.
+        start, end) or if the agency did not provide such information in their submission to Operations.
+    actual_construction_start:
+      display: Actual Construction Start
+      description: The date when the construction phase started
+      allowed_values: Date (MM/DD/YYYY)
+      limitations: This field may be empty if the project has not reached the milestone described (i.e.
+        start, end) or if the agency did not provide such information in their submission to Operations.
+    actual_construction_end:
+      display: Actual Construction End
+      description: The date when the construction phase was completed
+      allowed_values: Date (MM/DD/YYYY)
+      limitations: This field may be empty if the project has not reached the milestone described (i.e.
+        start, end) or if the agency did not provide such information in their submission to Operations.
+    borough:
+      display: Borough
+      description: Borough (Bronx, Brooklyn, Manhattan, Queens, Staten Island)
+      allowed_values: Citywide, Bronx, Brooklyn, Manhattan, Queens, Staten Island
+    community_board:
+      display: Community Board
+      description: Community Board where a capital project is located
+      allowed_values: 'Borough name with community board number. Ex: Bronx 01'
+      notes: A borough name without a specified number indicators the project is borough-wide not confined
+        to a particular community board.
+    budget_line:
+      display: Budget Line
+      description: Capital budget unit of appropriation
+      allowed_values: A combination of letters, number digits and sometimes hyphen. Multiple budget
+        lines are separated by comma.
+    ten_year_plan_category:
+      display: Ten Year Plan Category
+      description: Categories of work as described in city's Ten-Year Capital Strategy
+      allowed_values: Long English description
+      notes: https://www.nyc.gov/assets/omb/downloads/pdf/typ4-23.pdf
+    agency_data_date:
+      display: Agency Data Date
+      description: The date agency data was updated
+      allowed_values: Date (MM/DD/YYYY)
+    fms_data_date:
+      display: FMS Data Date
+      description: The date FMS data was updated
+      allowed_values: Date (MM/DD/YYYY)
+raw_budget_fy:
+  dataset: Capital Projects Dashboard - Budget and Spent by FY
+  socrata_id: gyhf-rsr3
+  columns:
+    reporting_period:
+      display: Reporting Period
+      description: The year and the month the report is published (format YYYYMM)
+      allowed_values: YYYYMM
+    managing_agency:
+      display: Managing Agency
+      description: Common acronym of the city agency that is responsible for managing the construction
+        and delivery of the capital project. This value is derived from the three digit managing agency
+        code.
+      allowed_values: The acronym of agencies.
+      notes: ACS = Administration for Children's Services BPL = Brooklyn Public Library CUNY = City
+        University of New York DCAS = Department of Citywide Administrative Services DCLA = Department
+        of Cultural Affairs DDC = Department of Design and Construction DEP = Department of Environmental
+        Protection DFTA = Department for the Aging DHS = Department of Homeless Services DOC = Department
+        of Correction DOHMH = Department of Health and Mental Hygiene DOT = Department of Transportation
+        DPR = Department of Parks and Recreation DSNY = Department of Sanitation EDC = Economic Development
+        Corporation FDNY = Fire Department HHC = Health and Hospitals Corporation HPD = Housing, Preservation,
+        and Development HRA = Human Resources Administration NYPD = Police Department NYPL = New York
+        Public Library NYRL OTI = Office of Technology and Innovation QPL = Queens Public Library
+    fms_id:
+      display: FMS ID
+      description: Unique identifier in the Financial Management System (FMS)
+      key: Foreign Key
+      allowed_values: A combination of letters, number digits and sometimes hyphen. Less than 12 characters
+        in total.
+    fiscal_year:
+      display: Fiscal Year
+      key: One-year accounting period
+      allowed_values: 'Fiscal year (format: YYYY)'
+    total_budget_city_non_city:
+      display: Total Budget (City + Non-City)
+      description: The total cost of the project, as reflected by "Commitments" in the City's Financial
+        Management System (FMS) - see "Total Budget" above
+      allowed_values: Dollar amount
+    city:
+      display: City
+      description: Total planned expenditures for the project funded by the City
+      allowed_values: Dollar amount
+    non_city:
+      display: Non-City
+      description: Total planned expenditures for the project funded by sources other than the City
+      allowed_values: Dollar amount
+    spend:
+      display: Spend
+      description: The amount of money spent, as reflected by "Liquidations" in the City's Financial
+        Management System (FMS)
+      allowed_values: Dollar amount
+      limitations: This field represents actual money spent in each fiscal year. The value in this field
+        would be empty for future fiscal years.
+raw_schedule_history:
+  dataset: Capital Projects Dashboard - Schedule History and Variance
+  socrata_id: 95tx-snak
+  columns:
+    reporting_period:
+      display: Reporting Period
+      description: The year and the month the report is published (format YYYYMM). The dataset is updated
+        3 times a year following OMB’s commitment plan release date in Jan/May/Sep.
+    managing_agency:
+      display: Managing Agency
+      description: Common acronym of the city agency that is responsible for managing the construction
+        and delivery of the capital project. This value is derived from the three digit managing agency
+        code.
+      allowed_values: The acronym of agencies.
+    pid:
+      display: PID
+      description: Unique identifier that represent a set of schedule managed by agency.
+      key: Foreign Key
+      allowed_values: Integer
+    agency_project_name:
+      display: Agency Project Name
+      description: The name of the project in the managing agency's project management system
+      allowed_values: Long English description
+      limitations: This field may be blank if the information was not provided by the agency.
+    current_phase:
+      display: Current Phase
+      description: 'The phase the project is in: Pre-Design, Design, Construction Procurement, Construction,
+        or Close-out'
+      allowed_values: 'The standard phases are: Pre-Design / Design / Construction Procurement / Construction
+        / Close Out. In this column, the use of parentheses indicates the rationale for deviations,
+        providing an explanation as to why the project does not conform to the standard phase.'
+    completion_date:
+      display: Completion Date
+      description: The date when the entire project is expected to be completed or has completed (driven
+        by 'completion date type' field.
+      allowed_values: Date (MM/DD/YYYY)
+      limitations: This field may be empty if the project has not reached the milestone described (i.e.
+        start, end) or if the agency did not provide such information in their submission to Operations.
+    completion_date_type:
+      display: Completion Date Type
+      description: This field specify if the 'completion date' is a forecast date or an actual date
+      allowed_values: Forecast / Actual
+    variance_day:
+      display: Variance (day)
+      description: This is the difference calculated by 'completion date' of current row value subtracted
+        by the same column of prior nearest reporting period.
+      limitations: If there's not a completion date of current row or prior nearest reporting period,
+        it would be empty.
+    reason_for_forecast_completion_change:
+      display: Reason for Forecast Completion Change
+      description: This is the rationale provided when the forecasted completion date differs from the
+        previously forecasted date.
+      allowed_values: Short English description
+    data_date:
+      display: Data Date
+      description: The actual date this record submitted by agency
+      allowed_values: Date (MM/DD/YYYY)
+raw_budget_history:
+  dataset: Capital Projects Dashboard - Budget Spend History and Variance
+  socrata_id: qj5n-h5qp
+  columns:
+    managing_agency:
+      display: Managing Agency
+      description: Common acronym of the city agency that is responsible for managing the construction
+        and delivery of the capital project. This value is derived from the three digit managing agency
+        code.
+      allowed_values: The acronym of agencies.
+    fms_id:
+      display: FMS ID
+      description: Unique identifier in the Financial Management System (FMS)
+      key: Foreign Key
+      allowed_values: A combination of letters, number digits and sometimes hyphen. Less than 12 characters
+        in total.
+    year_month_reported:
+      display: Year-Month Reported
+      description: The year and the month the budget spend data was recorded
+    total_budget:
+      display: Total Budget
+      description: The total cost of the project, as reflected by "Commitments" in the City's Financial
+        Management System (FMS)
+      allowed_values: Dollar amount
+    spend_to_date:
+      display: Spend to Date
+      description: The amount of money spent to date, as reflected by "Liquidations" in the City's Financial
+        Management System (FMS)
+      allowed_values: Dollar amount
+    spend_to_date_1:
+      display: Spend to Date %
+      description: The amount of money spent to date, as reflected by "Liquidations" in the City's Financial
+        Management System (FMS) shown as a percentage of Total Budget (%).
+      allowed_values: Percentage with two decimal places
+    budget_variance:
+      display: Budget Variance
+      description: This is the difference calculated by 'total budget of current row ' value subtracted
+        by the same column of prior nearest Year-Month reported.
+      allowed_values: Dollar amount
+    budget_variance_1:
+      display: Budget Variance %
+      description: This is the percentage calculated by 'total budget of current row ' value subtracted
+        by the same column of prior nearest Year-Month reported, then divided by the same column of
+        prior nearest Year-Month reported value.
+      allowed_values: Percentage with two decimal places

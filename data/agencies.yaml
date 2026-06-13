@@ -1,0 +1,517 @@
+# Hand-curated dictionary of NYC agencies for the OD_CPD agency resolver.
+#
+# Purpose: power "what is <agency>?" answers and resolve user-typed agency
+# names/acronyms to the canonical `managing_agency` value used by the NYC
+# Capital Projects datasets on Socrata (fb86-vt7u et al.).
+#
+# JOIN KEY: `cpdw_acronym` is the value that appears in the datasets'
+# `managing_agency` column (= the "CPDW Acronym" of the backend FMS_Agency
+# table). Entries WITHOUT a `cpdw_acronym` are dictionary-only: real NYC
+# entities that never appear as a capital-project managing agency (most
+# mayoral offices, oversight boards, courts). They still answer "what is X?".
+#
+# CPD-ACTIVE TAGGING IS RUNTIME, NOT STATIC: the MCP intersects this dict with
+# live data at startup to learn which agencies actually have projects (and
+# their counts). Do NOT bake project counts or an `active` flag into this file
+# — it would go stale on every data refresh. As of the 2026-05 research pass,
+# only 25 agencies were live (big builders: DPR, DDC, DOT, DEP, EDC, DCAS,
+# HHC, CUNY; long tail after).
+#
+# NOTE: the 3-digit numeric FMS agency code (e.g. 040=DOE) is backend-only and
+# NOT published in the public datasets, so it is intentionally absent here.
+#
+# Slug convention: lowercase abbreviation when well-known and non-ambiguous,
+# else kebab-case. Aliases should include the common acronym, the full legal
+# name, and any CPD-side label so the resolver matches user phrasing and live
+# `managing_agency` strings alike.
+acs:
+  display: "Administration for Children's Services"
+  cpdw_acronym: "ACS"
+  aliases: ["ACS", "Administration for Children's Services"]
+
+bic:
+  display: "Business Integrity Commission"
+  cpdw_acronym: "BIC"
+  aliases: ["BIC", "Business Integrity Commission"]
+
+boe:
+  display: "Board of Elections"
+  cpdw_acronym: "BOE"
+  aliases: ["BOE", "Board of Elections"]
+
+cau:
+  display: "Community Affairs Unit"
+  aliases: ["Community Affairs Unit"]
+
+ccrb:
+  display: "Civilian Complaint Review Board"
+  cpdw_acronym: "CCRB"
+  aliases: ["CCRB", "Civilian Complaint Review Board"]
+
+nyc-opportunity:
+  display: "Mayor's Office for Economic Opportunity"
+  aliases: ["NYC Opportunity", "Mayor's Office for Economic Opportunity"]
+
+counsel-to-the-mayor:
+  display: "Counsel to the Mayor"
+  aliases: ["Counsel to the Mayor"]
+
+cuny:
+  display: "City University of New York"
+  cpdw_acronym: "CUNY"
+  aliases: ["CUNY", "City University of New York"]
+
+dcwp:
+  # Renamed from "Department of Consumer Affairs" (DCA) in 2020. Bills before
+  # 2020 cite DCA; after, DCWP. Merged into one entry so a query for either
+  # name returns the agency's full history.
+  display: "Department of Consumer and Worker Protection"
+  cpdw_acronym: "DCA"
+  # cpdw_acronym DCA: FMS still publishes under the pre-2020 "Department of Consumer Affairs" code.
+  aliases:
+    - "DCWP"
+    - "Department of Consumer and Worker Protection"
+    - "DCA"
+    - "Department of Consumer Affairs"
+
+# role_default: "managing" marks the three construction-manager-as-a-service agencies
+# (DDC, DCAS, EDC) whose "their projects" question means what they BUILD, not own.
+# Absent => "sponsor" (owner view). Drives agency_dim.role_default; see docs/FEATURES.md §4.
+dcas:
+  display: "Department of Citywide Administrative Services"
+  cpdw_acronym: "DCAS"
+  role_default: managing
+  aliases: ["DCAS", "Department of Citywide Administrative Services"]
+
+dcla:
+  display: "Department of Cultural Affairs"
+  cpdw_acronym: "DCLA"
+  aliases: ["DCLA", "Department of Cultural Affairs"]
+
+dcp:
+  display: "Department of City Planning"
+  cpdw_acronym: "PLANNING"
+  aliases: ["DCP", "Department of City Planning"]
+
+ddc:
+  display: "Department of Design and Construction"
+  cpdw_acronym: "DDC"
+  role_default: managing
+  aliases: ["DDC", "Department of Design and Construction"]
+
+dep:
+  display: "Department of Environmental Protection"
+  cpdw_acronym: "DEP"
+  aliases: ["DEP", "Department of Environmental Protection"]
+
+dfta:
+  display: "Department for the Aging"
+  cpdw_acronym: "DFTA"
+  aliases: ["DFTA", "Department for the Aging"]
+
+dhs:
+  display: "Department of Homeless Services"
+  cpdw_acronym: "DHS"
+  aliases: ["DHS", "Department of Homeless Services"]
+
+dob:
+  display: "Department of Buildings"
+  cpdw_acronym: "DOB"
+  aliases: ["DOB", "Department of Buildings"]
+
+doc:
+  display: "Department of Correction"
+  cpdw_acronym: "DOC"
+  aliases: ["DOC", "Department of Correction"]
+
+doe:
+  display: "Department of Education"
+  cpdw_acronym: "DOE"
+  aliases: ["DOE", "Department of Education"]
+
+dof:
+  display: "Department of Finance"
+  cpdw_acronym: "DOF"
+  aliases: ["DOF", "Department of Finance"]
+
+dohmh:
+  display: "Department of Health and Mental Hygiene"
+  cpdw_acronym: "DOHMH"
+  aliases: ["DOHMH", "Department of Health and Mental Hygiene"]
+
+doi:
+  display: "Department of Investigation"
+  cpdw_acronym: "DOI"
+  aliases: ["DOI", "Department of Investigation"]
+
+doitt:
+  # Predecessor of OTI (Office of Technology and Innovation); reorg'd 2022.
+  # Kept as separate entry because pre-2022 bills cite DoITT.
+  display: "Department of Information Technology and Telecommunications"
+  cpdw_acronym: "OTI"
+  # cpdw_acronym OTI: FMS uses OTI for both DoITT (pre-2022) and OTI. Shared with the `oti` entry.
+  aliases: ["DOITT", "Department of Information Technology and Telecommunications"]
+
+dop:
+  display: "Department of Probation"
+  cpdw_acronym: "DOP"
+  aliases: ["DOP", "Department of Probation"]
+
+doris:
+  display: "Department of Records and Information Services"
+  cpdw_acronym: "DORIS"
+  aliases: ["DORIS", "Department of Records and Information Services"]
+
+dot:
+  display: "Department of Transportation"
+  cpdw_acronym: "DOT"
+  aliases: ["DOT", "Department of Transportation"]
+
+dpr:
+  display: "Department of Parks and Recreation"
+  cpdw_acronym: "DPR"
+  aliases: ["DPR", "Department of Parks and Recreation"]
+
+dsny:
+  display: "Department of Sanitation"
+  cpdw_acronym: "DSNY"
+  aliases: ["DSNY", "Department of Sanitation"]
+
+dycd:
+  display: "Department of Youth and Community Development"
+  cpdw_acronym: "DYCD"
+  aliases: ["DYCD", "Department of Youth and Community Development"]
+
+edc:
+  display: "Economic Development Corporation"
+  cpdw_acronym: "EDC"
+  role_default: managing
+  # Live managing_agency="EDC" = Economic Development Corporation (a major
+  # capital builder). NB: the backend FMS dimension also files DOSBS (Small
+  # Business Services, see `sbs`) under this same "EDC" acronym, so any
+  # SBS-managed capital is indistinguishable from EDC in public data —
+  # a known limitation, not an equivalence.
+  aliases: ["EDC", "Economic Development Corporation"]
+
+fdny:
+  display: "Fire Department of New York"
+  cpdw_acronym: "FDNY"
+  aliases: ["FDNY", "Fire Department of New York"]
+
+fisa:
+  display: "Financial Information Services Agency"
+  cpdw_acronym: "FISA"
+  aliases: ["FISA", "Financial Information Services Agency"]
+
+hh:
+  # ONE entity, two names people use interchangeably: the older legal name
+  # "Health and Hospitals Corporation" (HHC) and the post-~2015 rebrand
+  # "NYC Health + Hospitals" (H+H). Merged so a query for either resolves to
+  # the agency's full history. Live CPD data still keys it as managing_agency
+  # ="HHC" (a major capital builder) — hence cpdw_acronym below.
+  display: "NYC Health + Hospitals"
+  cpdw_acronym: "HHC"
+  aliases:
+    - "H+H"
+    - "HHC"
+    - "NYC Health + Hospitals"
+    - "Health + Hospitals"
+    - "Health and Hospitals"
+    - "Health and Hospitals Corporation"
+    - "NYC H+H"
+
+hhs-connect:
+  display: "Health and Human Services Connect"
+  aliases: ["HHS Connect", "Health and Human Services Connect"]
+
+hpd:
+  display: "Housing Preservation and Development"
+  cpdw_acronym: "HPD"
+  aliases: ["HPD", "Housing Preservation and Development"]
+
+hra:
+  display: "Human Resources Administration"
+  cpdw_acronym: "HRA"
+  aliases: ["HRA", "Human Resources Administration"]
+
+cchr:
+  display: "City Commission on Human Rights"
+  aliases: ["CCHR", "City Commission on Human Rights"]
+
+hro:
+  # Dictionary-only: the FMS "HRO" acronym denotes the NYC Housing Authority
+  # (see `nycha`), NOT the Housing Recovery Office. The letter overlap is
+  # coincidental — Housing Recovery Office has no FMS capital identity.
+  display: "Housing Recovery Office"
+  aliases: ["HRO", "Housing Recovery Office"]
+
+iga:
+  display: "Intergovernmental Affairs"
+  aliases: ["Intergovernmental Affairs"]
+
+law:
+  # Aliased only as "Law Department" — bare "LAW" matches every legislative
+  # text and would generate massive false positives.
+  display: "Law Department"
+  cpdw_acronym: "LAW"
+  aliases: ["Law Department"]
+
+city-leg:
+  display: "Legislative Affairs - City"
+  aliases: ["City Leg", "Legislative Affairs - City"]
+
+fed-leg:
+  display: "Legislative Affairs - Federal"
+  aliases: ["Fed Leg", "Legislative Affairs - Federal"]
+
+state-leg:
+  display: "Legislative Affairs - State"
+  aliases: ["State Leg", "Legislative Affairs - State"]
+
+lpc:
+  display: "Landmarks Preservation Commission"
+  cpdw_acronym: "LPC"
+  aliases: ["LPC", "Landmarks Preservation Commission"]
+
+mopi:
+  display: "Mayor's Office of Pensions and Investments"
+  aliases: ["MOPI", "Mayor's Office of Pensions and Investments"]
+
+mayors-office:
+  display: "Office of the Mayor"
+  cpdw_acronym: "Mayor's Office"
+  aliases: ["Mayor's Office", "Office of the Mayor"]
+
+mocj:
+  display: "Mayor's Office of Criminal Justice"
+  aliases: ["MOCJ", "Mayor's Office of Criminal Justice"]
+
+endgbv:
+  display: "Mayor's Office to End Domestic and Gender-Based Violence"
+  aliases: ["ENDGBV", "Mayor's Office to End Domestic and Gender-Based Violence"]
+
+mocs:
+  display: "Mayor's Office of Contract Services"
+  aliases: ["MOCS", "Mayor's Office of Contract Services"]
+
+moia:
+  display: "Mayor's Office of Immigrant Affairs"
+  aliases: ["MOIA", "Mayor's Office of Immigrant Affairs"]
+
+mome:
+  display: "Mayor's Office of Media and Entertainment"
+  aliases: ["MOME", "Mayor's Office of Media and Entertainment"]
+
+nypd:
+  display: "New York City Police Department"
+  cpdw_acronym: "NYPD"
+  aliases: ["NYPD", "New York City Police Department", "Police Department"]
+
+oath:
+  display: "Office of Administrative Trials and Hearings"
+  cpdw_acronym: "OATH"
+  aliases: ["OATH", "Office of Administrative Trials and Hearings"]
+
+nycem:
+  display: "New York City Emergency Management"
+  cpdw_acronym: "NYCEM"
+  aliases: ["NYCEM", "New York City Emergency Management", "Emergency Management"]
+
+wkdev:
+  display: "Workforce Development"
+  aliases: ["Workforce Development"]
+
+mos:
+  display: "Mayor's Office of Sustainability"
+  aliases: ["MOS", "Mayor's Office of Sustainability"]
+
+omb:
+  display: "Office of Management and Budget"
+  cpdw_acronym: "OMB"
+  aliases: ["OMB", "Office of Management and Budget"]
+
+opa:
+  display: "Office of Payroll Administration"
+  cpdw_acronym: "OPA"
+  aliases: ["OPA", "Office of Payroll Administration"]
+
+tlc:
+  display: "Taxi and Limousine Commission"
+  cpdw_acronym: "TLC"
+  aliases: ["TLC", "Taxi and Limousine Commission"]
+
+nycha:
+  display: "New York City Housing Authority"
+  cpdw_acronym: "HRO"
+  # The backend FMS dimension records the NYC Housing Authority under the
+  # acronym "HRO" (not currently present in live CPD data). Distinct from the
+  # similarly-lettered Housing Recovery Office (`hro`), which has no FMS identity.
+  aliases: ["NYCHA", "New York City Housing Authority", "Housing Authority"]
+
+sbs:
+  # Dictionary-only: SBS has no own CPD managing-agency identity. The backend
+  # FMS dimension files DOSBS (Small Business Services) under the "EDC"
+  # acronym, and live data exposes only "EDC" (= Economic Development
+  # Corporation, see `edc`). SBS-managed capital, if any, is therefore not
+  # separable from EDC in public data — we do NOT equate SBS with EDC.
+  display: "Small Business Services"
+  aliases: ["SBS", "Small Business Services"]
+
+mor:
+  display: "Mayor's Office of Resiliency"
+  aliases: ["MOR", "Mayor's Office of Resiliency"]
+
+mayors-office-of-operations:
+  # v1 entry; aliases unchanged. Bare "OPS"/"MOO" deliberately omitted —
+  # they false-positive ("co-ops", random 3-letter sequences).
+  display: "Mayor's Office of Operations"
+  aliases:
+    - "Mayor's Office of Operations"
+    - "Mayor's office of operations"
+    - "Office of Operations"
+
+mofp:
+  display: "Mayor's Office of Food Policy"
+  aliases: ["MOFP", "Mayor's Office of Food Policy"]
+
+nyc-311:
+  # The source agency table listed "311" with nameFull "City of New York"
+  # (clearly a data-entry quirk). 311 is the help-line system, treated here
+  # as its own pseudo-agency since civic researchers ask about 311.
+  display: "NYC 311"
+  aliases: ["311", "NYC 311"]
+
+olr:
+  display: "Office of Labor Relations"
+  aliases: ["OLR", "Office of Labor Relations"]
+
+panynj:
+  display: "Port Authority of New York & New Jersey"
+  aliases: ["PANYNJ", "Port Authority of New York & New Jersey", "Port Authority"]
+
+oer:
+  display: "Office of Environmental Remediation"
+  aliases: ["OER", "Office of Environmental Remediation"]
+
+hpa:
+  display: "Homelessness Prevention Administration"
+  aliases: ["HPA", "Homelessness Prevention Administration"]
+
+dvs:
+  display: "Department of Veteran Services"
+  aliases: ["DVS", "Department of Veteran Services"]
+
+fdm:
+  display: "First Deputy Mayor"
+  aliases: ["First Deputy Mayor"]
+
+dmhhs:
+  display: "Deputy Mayor for Health and Human Services"
+  aliases: ["DMHHS", "Deputy Mayor for Health and Human Services"]
+
+dmhed:
+  display: "Deputy Mayor for Housing and Economic Development"
+  aliases: ["DMHED", "Deputy Mayor for Housing and Economic Development"]
+
+dmspi:
+  display: "Deputy Mayor for Strategic Policy Initiatives"
+  aliases: ["DMSPI", "Deputy Mayor for Strategic Policy Initiatives"]
+
+mta:
+  display: "Metropolitan Transportation Authority"
+  aliases: ["MTA", "Metropolitan Transportation Authority"]
+
+senior-advisor-infrastructure:
+  display: "Senior Advisor on Infrastructure"
+  aliases: ["Senior Advisor on Infrastructure"]
+
+mayors-fund:
+  display: "Mayor's Fund to Advance New York City"
+  aliases: ["Mayor's Fund", "Mayor's Fund to Advance New York City"]
+
+hhs-accelerator:
+  display: "Health and Human Services Accelerator"
+  aliases: ["HHS Accelerator", "Health and Human Services Accelerator"]
+
+oec:
+  display: "Office of Environmental Coordination"
+  aliases: ["Office of Environmental Coordination"]
+
+mopd:
+  display: "Mayor's Office for People with Disabilities"
+  aliases: ["MOPD", "Mayor's Office for People with Disabilities"]
+
+nyc-service:
+  display: "New York City Service"
+  aliases: ["NYC Service", "New York City Service"]
+
+nypl:
+  display: "New York Public Library"
+  cpdw_acronym: "NYPL"
+  aliases: ["NYPL", "New York Public Library"]
+
+bpl:
+  display: "Brooklyn Public Library"
+  cpdw_acronym: "BPL"
+  aliases: ["BPL", "Brooklyn Public Library"]
+
+qpl:
+  display: "Queens Public Library"
+  cpdw_acronym: "QPL"
+  aliases: ["QPL", "Queens Public Library"]
+
+intl-affairs:
+  display: "Mayor's Office of International Affairs"
+  aliases: ["Mayor's Office of International Affairs"]
+
+moda:
+  display: "Mayor's Office of Data Analytics"
+  aliases: ["MODA", "Mayor's Office of Data Analytics"]
+
+sca:
+  display: "New York City School Construction Authority"
+  cpdw_acronym: "SCA"
+  aliases: ["SCA", "New York City School Construction Authority", "School Construction Authority"]
+
+appointments:
+  display: "Mayor's Office of Appointments"
+  aliases: ["Mayor's Office of Appointments"]
+
+cpp:
+  display: "Climate Policy and Programs"
+  aliases: ["Climate Policy and Programs"]
+
+ocme:
+  display: "Office of Chief Medical Examiner"
+  aliases: ["OCME", "Office of Chief Medical Examiner"]
+
+mwbe:
+  display: "Minority and Women-Owned Business Enterprises"
+  aliases: ["MWBE", "Minority and Women-Owned Business Enterprises", "M/WBE"]
+
+cge:
+  display: "Commission on Gender Equity"
+  aliases: ["Commission on Gender Equity"]
+
+peu:
+  display: "Mayor's Public Engagement Unit"
+  aliases: ["Mayor's Public Engagement Unit"]
+
+dss:
+  display: "Department of Social Services"
+  cpdw_acronym: "DSS"
+  aliases: ["DSS", "Department of Social Services"]
+
+oti:
+  # Successor to DoITT (2022 reorg). Kept separate from DoITT entry so
+  # post-2022 bills citing "OTI" don't get conflated with pre-2022 DoITT.
+  display: "Office of Technology and Innovation"
+  cpdw_acronym: "OTI"
+  aliases: ["OTI", "Office of Technology and Innovation"]
+
+nyrl:
+  # New York Research Libraries (the NYPL research division). Appears as a
+  # distinct managing_agency="NYRL" in CPD data, separate from `nypl`.
+  display: "New York Research Libraries"
+  cpdw_acronym: "NYRL"
+  aliases: ["NYRL", "New York Research Libraries"]

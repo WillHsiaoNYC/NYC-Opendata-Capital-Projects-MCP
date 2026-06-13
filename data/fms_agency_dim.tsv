@@ -1,0 +1,219 @@
+name	shortName	CPDW Acronym
+Mayoralty	MAYORALTY	Mayor's Office
+Board of Elections	BD ELECTIONS	BOE
+Campaign Finance Board	C.F.B.	CFB
+BD OF ESTIMATE,BUR SECRETARY	BD EST-SEC	BD EST-SEC
+BD OF ESTIMATE,BUR FRANCHISES	BD EST-FRAN	BD EST-FRAN
+Office of the Actuary	ACTUARY	ACTUARY
+NYC EMPLOYEES RETIREMENT SYSTM	NYCERS	NYCERS
+Borough President - Manhattan	BP MANHATTAN	BP MANHATTAN
+Borough President - Bronx	BP BRONX	BP BRONX
+Borough President - Brooklyn	BP BROOKLYN	BP BROOKLYN
+Borough President - Queens	BP QUEENS	BP QUEENS
+Borough President - Staten Island	BORO PRES SI	BP SI
+Office of the Comptroller	COMPTROLLER	COMPTROLLER
+Department of Emergency Management	EMERG MGMT	NYCEM
+OMB	OMB	OMB
+Office of Administrative Tax Appeals	OATA	OATA
+Law Department	LAW DEPT	LAW
+ART COMMISSION	ART COMM	ART
+NYC GAMBLING CONTROL COMM.	GAMBLING COM	GAMBLING
+Department of City Planning	CTY PLANNING	PLANNING
+DEPARTMENT OF PERSONNEL	PERSONNEL	PERSONNEL
+Department of Investigation	INVESTIGATN	DOI
+MSA - CAPITAL	MSA - CAPITA	MSA CAPITA
+New York Research Libraries	NY RESCH LIB	NYRL
+New York Public Library	NY PUB LIB	NYPL
+Brooklyn Public Library	BK PUB LIB	BPL
+Queens Borough Public Library	QNS PUB LIB	QPL
+Department of Education	EDUCATION	DOE
+TEACHERS' RETIREMENT SYSTEM	TRS	TRS
+City University of New York	CUNY	CUNY
+City University Construction Fund	CUCF	CUCF
+SCHOOL CONSTRUCTION AUTHORITY	SCL CON AUTH	SCA
+SCA AGENCY FOR BOE DECREASES	SCA	SCA BOE
+Civilian Complaint Review Board	CCRB	CCRB
+DEPARTMENT OF PARKS-CAPITAL	PARKS - CPTL	DPR CAPITAL
+Police Department	POLICE DEPT.	NYPD
+Fire Department	FIRE DEPT	FDNY
+BOARD OF STANDARDS & APPEALS	BD/STAND/APP	BD STAND APP
+CITY SHERIFF	CITY SHERIFF	CITY SHERIFF
+DEPARTMENT OF VETERANS' SERVICES	VETERANS SVC	VETERANS SVC
+DEPARTMENT OF SANITATION-CAPITAL	SANIT.- CAP.	SANIT CAP
+Administration for Children's Services	ADM CHILD SV	ACS
+Department of Social Services	DSS	DSS
+PAYMENTS TO CHARITABLE INST.	PAY CHAR INS	PAY CHAR INS
+Department of Homeless Services	HOMELESS	DHS
+Department of Correction	CORRECTION	DOC
+Board of Correction	BD CORRECTN	BOC
+FAMILY COURT	FAMILY COURT	FAMILY COURT
+CRIMINAL COURT	CRIMINAL CT	CRIMINAL CT
+CIVIL COURT	CIVIL COURT	CIVIL CT
+DEPT OF MARINE & AVIATION-CPTL	MAR&AV-CAPTL	MAR AV CAPTL
+WATER SUPPLY	WATER SUP	Water Supply
+DEPARTMENT OF EMPLOYMENT	DPT EMPLOYNT	EMPLOYMENT
+Pension Contributions	PENSION CONT	PENSION
+Human Resources Administration	HRA	HRA
+DEFAULT AGENCY	DEFAULT	DEFAULT
+Miscellaneous	MISC	MISC
+Debt Service	DEBT	DEBT
+MAC DEBT SERVICE FUNDING	MAC DEBT	MAC DEBT
+Public Advocate	PUB ADVOCATE	PUB ADVOCATE
+City Council	CITY COUNCIL	COUNCIL
+City Clerk	City Clerk	CLERK
+LEGISLATIVE OFFICE BUDGET REV.	LEG BUD REV	LEG BUD REV
+TRANSITIONAL FINANCE AUTHORITY	T.F.A.	TFA
+CITY-WIDE EQUIPMENT PURCHASES	CW EQP PURCH	CITY EQUIP
+Department for the Aging	DP FOR AGING	DFTA
+Department of Cultural Affairs	CULTURAL AFF	DCLA
+Financial Information Services Agency	FISA	FISA
+Department of Juvenile Justice	JUVENILE JST	JUVENILE JST
+Office of Payroll Administration	OFF PAY ADM	OPA
+Independent Budget Office	IND BUDGET	IND BUDGET
+Equal Employment Practices Commission	E.E.P.C	EEPC
+Civil Service Commission	CIV SERV COM	CIV SERV COM
+COMM ON PUB INFO AND COMMUN	PUBLIC INFO	PUBLIC INFO
+Landmarks Preservation Commission	LANDMARKS	LPC
+DEPARTMENT OF TELECOMMUNICATIONS	DEPT OF TELE	TELECOM
+Districting Commission	DIST COMM	DIST COMM
+NYC Taxi and Limousine Commission	TXI/LIMO COM	TLC
+HEALTH PAYMENTS	HEALTH PYMTS	HEALTH
+Commission on Human Rights	HUM RIGHTS	HUM RIGHTS
+Department of Youth and Community Development	DOYACD	DYCD
+Conflicts of Interest Board	CONF OF INT	COIB
+Office of Collective Bargaining	COLLECT BARG	COLLECT BARG
+Manhattan Community Board # 1	MAN CB #1	MAN CB #1
+Manhattan Community Board # 2	MAN CB #2	MAN CB #2
+Manhattan Community Board # 3	MAN CB #3	MAN CB #3
+Manhattan Community Board # 4	MAN CB #4	MAN CB #4
+Manhattan Community Board # 5	MAN CB #5	MAN CB #5
+Manhattan Community Board # 6	MAN CB #6	MAN CB #6
+Manhattan Community Board # 7	MAN CB #7	MAN CB #7
+Manhattan Community Board # 8	MAN CB #8	MAN CB #8
+Manhattan Community Board # 9	MAN CB #9	MAN CB #9
+Manhattan Community Board # 10	MAN CB #10	MAN CB #10
+Manhattan Community Board # 11	MAN CB #11	MAN CB #11
+Manhattan Community Board # 12	MAN CB #12	MAN CB #12
+Bronx Community Board # 1	BX CB #1	BX CB #1
+Bronx Community Board # 2	BX CB #2	BX CB #2
+Bronx Community Board # 3	BX CB #3	BX CB #3
+Bronx Community Board # 4	BX CB #4	BX CB #4
+Bronx Community Board # 5	BX CB #5	BX CB #5
+Bronx Community Board # 6	BX CB #6	BX CB #6
+Bronx Community Board # 7	BX CB #7	BX CB #7
+Bronx Community Board # 8	BX CB #8	BX CB #8
+Bronx Community Board # 9	BX CB #9	BX CB #9
+Bronx Community Board # 10	BX CB #10	BX CB #10
+Bronx Community Board # 11	BX CB #11	BX CB #11
+Bronx Community Board # 12	BX CB #12	BX CB #12
+BANKERS TRUST COMPANY	BANKERS TR	BANKERS TR
+Fleet Financial Services	Fleet Bank	Fleet Bank
+CHASE MANHATTAN BANK	CHASE	CHASE
+CHEMICAL BANK	CHEMICAL	CHEMICAL
+WELLS FARGO	WELLSFARGO	WELLSFARGO
+CITIBANK	CITIBANK	CITIBANK
+EUROPEAN AMERICAN BANK	EUROPEAN AM	EUROPEAN AM
+MANUFACTURERS HANOVER TRUST CO	MAN HANOVER	MAN HANOVER
+MARINE MIDLAND BANK	MARINE MIDLD	MARINE MIDLD
+MORGAN GUARANTEE TRUST CO.	MORGAN GUAR	MORGAN GUAR
+Queens Community Board # 1	QNS CB #1	QNS CB #1
+Queens Community Board # 2	QNS CB #2	QNS CB #2
+Queens Community Board # 3	QNS CB #3	QNS CB #3
+Queens Community Board # 4	QNS CB #4	QNS CB #4
+Queens Community Board # 5	QNS CB #5	QNS CB #5
+Queens Community Board # 6	QNS CB #6	QNS CB #6
+Queens Community Board # 7	QNS CB #7	QNS CB #7
+Queens Community Board # 8	QNS CB #8	QNS CB #8
+Queens Community Board # 9	QNS CB #9	QNS CB #9
+Queens Community Board # 10	QNS CB #10	QNS CB #10
+Queens Community Board # 11	QNS CB #11	QNS CB #11
+Queens Community Board # 12	QNS CB #12	QNS CB #12
+Queens Community Board # 13	QNS CB #13	QNS CB #13
+Queens Community Board # 14	QNS CB #14	QNS CB #14
+Brooklyn Community Board # 1	BKLYN CB #1	BKLYN CB #1
+Brooklyn Community Board # 2	BKLYN CB #2	BKLYN CB #2
+Brooklyn Community Board # 3	BKLYN CB #3	BKLYN CB #3
+Brooklyn Community Board # 4	BKLYN CB #4	BKLYN CB #4
+Brooklyn Community Board # 5	BKLYN CB #5	BKLYN CB #5
+Brooklyn Community Board # 6	BKLYN CB #6	BKLYN CB #6
+Brooklyn Community Board # 7	BKLYN CB #7	BKLYN CB #7
+Brooklyn Community Board # 8	BKLYN CB #8	BKLYN CB #8
+Brooklyn Community Board # 9	BKLYN CB #9	BKLYN CB #9
+Brooklyn Community Board # 10	BKLYN CB #10	BKLYN CB #10
+Brooklyn Community Board # 11	BKLYN CB #11	BKLYN CB #11
+Brooklyn Community Board # 12	BKLYN CB #12	BKLYN CB #12
+Brooklyn Community Board # 13	BKLYN CB #13	BKLYN CB #13
+Brooklyn Community Board # 14	BKLYN CB #14	BKLYN CB #14
+Brooklyn Community Board # 15	BKLYN CB #15	BKLYN CB #15
+Brooklyn Community Board # 16	BKLYN CB #16	BKLYN CB #16
+Brooklyn Community Board # 17	BKLYN CB #17	BKLYN CB #17
+Brooklyn Community Board # 18	BKLYN CB #18	BKLYN CB #18
+Staten Island Community Board # 1	SI CB #1	SI CB #1
+Staten Island Community Board # 2	SI CB #2	SI CB #2
+Staten Island Community Board # 3	SI CB #3	SI CB #3
+BROOKLYN MUSUEM	BROOKLYN MUS	BROOKLYN MUS
+HEALTH SERVICES - CAPITAL	HSA - CAPITL	HSA - CAPITL
+Department of Probation	PROBATION	DOP
+Department of Small Business Services	DOSBS	EDC
+Department of Ports, International Trade and Commerce	PORTS +TRADE	PORTS +TRADE
+Housing Preservation and Development	HPD	HPD
+Department of Buildings	DEPT BLDG	DOB
+Department of Health and Mental Hygiene	HLTH & MNTL	DOHMH
+DEPARTMENT OF MENTAL HEALTH	DP MNTL HLTH	DP MNTL HLTH
+Health and Hospitals Corporation	HHC	HHC
+Office of Administrative Trials and Hearings	OATH	OATH
+Department of Environmental Protection	ENV PROTECT	DEP
+Department of Sanitation	DEPT SANIT	DSNY
+Business Integrity Commission	BUS INTR COM	BIC
+Department of Finance	FINANCE DEPT	DOF
+Department of Transportation	D.O.T.	DOT
+Department of Parks and Recreation	PARKS & RECR	DPR
+Department of Design and Construction	DESIGN & CON	DDC
+Department of Citywide Administrative Services	DOCAS	DCAS
+DCASDIVISION OF MUNICIPAL SUPPLY SERVICE	DCAS/DMSS	DCAS/DMSS
+Department of Information Technology and Telecommunications	OTI	OTI
+Department of Records and Information Services	DORIS	DORIS
+Department of Consumer Affairs	CONSUMER AFF	DCA
+District Attorney - New York County	D.A. N.Y.	D.A. N.Y.
+District Attorney - Bronx County	D.A. BRONX	D.A. BRONX
+District Attorney -Kings County	D.A. KINGS	D.A. KINGS
+District Attorney - Queens County	D.A. QUEENS	D.A. QUEENS
+District Attorney -Richmond County	D.A. RICH.	D.A. RICH.
+Office of Prosecution - Special Narcotics	PROS.SP.NARC	PROS.SP.NARC
+COUNTY CLERK - NEW YORK COUNTY	CLERK-NY CO	CLERK-NY CO
+COUNTY CLERK - BRONX COUNTY	CLERK-BX CO	CLERK-BX CO
+COUNTY CLERK - KINGS COUNTY	CLERK-KINGS	CLERK-KINGS
+COUNTY CLERK - QUEENS COUNTY	CLERK-QUEENS	CLERK-QUEENS
+COUNTY CLERK - RICHMOND COUNTY	CLERK-RICH.	CLERK-RICH.
+SUPREME COURT - 1ST JUD DIST	SUP COURT 1	SUP COURT 1
+SUPREME COURT-2ND JUD DIST	SUP COURT 2	SUP COURT 2
+SUPREME COURT - 11TH JUD DIST	SUP COURT 11	SUP COURT 11
+SUPREME COURT-2ND JUD DIST SI	SUP COURT 2	SUP COURT 2
+SUPREME COURT - APPELLATE DIV	SUP COURT AP	SUP COURT AP
+Public Administrator-New York County	PA-NY	PA-NY
+Public Administrator-Bronx County	P.A. BRONX	P.A. BRONX
+Public Administrator-Kings County	PA-KINGS	PA-KINGS
+Public Administrator-Queens County	P.A. QUEENS	P.A. QUEENS
+Public Administrator-Richmond County	PA-RICHMOND	PA-RICHMOND
+SURROGATES COURT - NEW YORK	SURR CT -NY	SURR CT -NY
+SURROGATES COURT - BRONX	SURR CT -BX	SURR CT -BX
+SURROGATES COURT - KINGS	SURR CT-KING	SURR CT-KING
+SURROGATES COURT - QUEENS	SURR CT-QNS	SURR CT-QNS
+SURROGATES COURT - RICHMOND	SURR CT-RICH	SURR CT-RICH
+HOUSING AUTHORITY	HOUSING AUTH	HRO
+MABSTOA - CAPITAL	MABSTOA-CPTL	DOE
+Transit Authority	TRANSIT - CP	Transit Authority
+CUSTODIAL AGY SMALL AGY	CSTDL AGY	CSTDL AGY
+FRINGE BENEFITS  COST CONTAINMENT	FR BEN C.C.	FR BEN C.C.
+CITYWIDE SAVINGS INITIATIVES	CITY SAVINGS	CITY SAVINGS
+PRIOR YEAR PAYABLES	PY PAYABLES	PY PAYABLES
+FEDERAL / STATE ACTIONS	FEDSTATE	FEDSTATE
+GENERAL RESERVE	GEN RESERVE	GEN RESERVE
+AGENCY RESERVES	AGCY RESERVE	AGCY RESERVE
+MAC DEBT SERVICE FUNDING	MAC DEBT SER	MAC DEBT SER
+ENERGY ADJUSTMENT	ENERGY ADJ	ENERGY ADJ
+LEASE ADJUSTMENT	LEASE ADJ	LEASE ADJ
+PROCUREMENT PEG	PROCURE PEG	PROCURE PEG
+FEDERAL ACTIONS	FED ACTIONS	FED ACTIONS
+CAPITAL LAPSE SET UP	CAP LAPSE	CAP LAPSE
+Disbursements Department	Disbursements	Disbursements
