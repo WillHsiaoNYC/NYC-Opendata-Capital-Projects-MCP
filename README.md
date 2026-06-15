@@ -32,6 +32,25 @@ Optional: set `OD_CPD_SOCRATA_APP_TOKEN` to a free
 [Socrata app token](https://dev.socrata.com/docs/app-tokens) to avoid
 anonymous rate limits during ingest.
 
+### Keeping data fresh
+
+The source datasets report on a **Jan / May / Sep** cycle, and Socrata
+typically publishes each period **~2.5–3 months later** (so new data usually
+lands around **April, August, and December**). `od-cpd update` is a no-op when
+nothing is newer, so it's safe to run any time — check around those months:
+
+```bash
+uv run od-cpd status      # what period is loaded now
+uv run od-cpd update      # re-ingest only if Socrata is newer
+```
+
+To keep it fresh automatically, schedule `update` (e.g. monthly via cron):
+
+```cron
+# 9am on the 1st of each month
+0 9 1 * * cd /path/to/repo && uv run od-cpd update
+```
+
 ### Connect an MCP client
 
 The server speaks stdio. With Claude Code:
