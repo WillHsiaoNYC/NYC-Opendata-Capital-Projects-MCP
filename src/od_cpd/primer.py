@@ -27,7 +27,21 @@ INCREASING side of a signed metric (slippage = delayed; overrun = cost growth) a
 never include the opposite direction.
 
 RAW tables store every column as text — cast in SQL (e.g. CAST(total_budget AS
-DOUBLE)). Spend reports only in periods ending 01/05/09.
+DOUBLE)). The whole report publishes 3x/year — periods ending 01/05/09
+(Jan/May/Sep) — mandated by the City's Commitment Plan; spend figures appear only
+in those periods.
+
+Lifecycle runs Pre-Design -> Design -> Construction Procurement -> Construction ->
+Close-out. A SCHEDULE (PID) is reported only from the start of Design through the
+end of Construction — Pre-Design and Close-out carry no schedule progression, and
+NULL milestones there are suppressed-by-rule, not missing. "Substantial completion"
+= the construction end date (actual_construction_end).
+
+A BUDGET (FMS) is reported for as long as its funding line stays active, which
+outlives construction — so a finished project (lifecycle_status = 'completed') stays
+present, sometimes for years, because its budget line is still open. Completed-but-
+present is normal: presence means an active BUDGET line, not active construction —
+never read a present project as work-in-progress.
 
 Agency attribution is role-aware. "Agency X's projects" means the SPONSOR (owner) view
 (sponsor_agency = X) for normal agencies, but the MANAGING (builder) view for the three

@@ -118,6 +118,27 @@ def test_current_phase_prefers_real_phase_over_reason():
     assert phase == "Design"
 
 
+def test_current_phase_display_casing_is_canonical():
+    # Upstream casing drift folds to one canonical Title-Case spelling on the DISPLAY
+    # column; paren no-schedule REASONS keep their raw label.
+    con = duckdb.connect(":memory:"); _raw(con)
+    con.executemany(
+        "INSERT INTO raw_project_detail (reporting_period, managing_agency, sponsor_agency,"
+        " pid, fms_id, total_budget, current_phase, borough) VALUES (?,?,?,?,?,?,?,?)",
+        [
+            ["202601", "DDC", "DDC", "401", "P1", "10", "Construction procurement", "K"],
+            ["202601", "DDC", "DDC", "402", "P2", "10", "closeout", "K"],
+            ["202601", "DDC", "DDC", "403", "P3", "10", "(Cancelled)", "K"],
+        ])
+    materialize.materialize_all(con)
+    rows = dict(con.execute(
+        "SELECT pid, current_phase FROM schedule_history "
+        "WHERE pid IN ('401','402','403')").fetchall())
+    assert rows["401"] == "Construction Procurement"
+    assert rows["402"] == "Close-out"
+    assert rows["403"] == "(Cancelled)"   # paren reason preserved verbatim
+
+
 def _orig_budget_fixture(con):
     con.executemany(
         "INSERT INTO raw_budget_history (managing_agency, fms_id, year_month_reported,"
