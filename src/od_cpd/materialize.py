@@ -17,6 +17,25 @@ def _normalized_phase_expr(col: str = "current_phase") -> str:
             "'\\s+', ' ', 'g')")
 
 
+def _canonical_phase_expr(raw_col: str = "current_phase") -> str:
+    """Canonical Title-Case label for the DISPLAY phase column.
+
+    Upstream casing drifts ('Construction procurement' vs 'Construction Procurement',
+    'closeout' vs 'close-out'); fold the five real phases to one canonical spelling so
+    detail output and ad-hoc `GROUP BY current_phase` don't split a bucket. Matching/
+    analytics stay on phase_norm; parenthesized no-schedule REASONS and anything
+    unmapped keep their raw label via ELSE.
+    """
+    return f"""CASE {_normalized_phase_expr(raw_col)}
+                 WHEN 'pre-design' THEN 'Pre-Design'
+                 WHEN 'design' THEN 'Design'
+                 WHEN 'construction procurement' THEN 'Construction Procurement'
+                 WHEN 'construction' THEN 'Construction'
+                 WHEN 'close-out' THEN 'Close-out'
+                 WHEN 'closeout' THEN 'Close-out'
+                 ELSE {raw_col} END"""
+
+
 def build_normalized(con: duckdb.DuckDBPyConnection) -> None:
     # 1) schedule_budget_link — M:M edge from fb86 PID rows, in-cadence, + cardinality.
     con.execute(f"""
@@ -88,7 +107,8 @@ def build_normalized(con: duckdb.DuckDBPyConnection) -> None:
                     WHEN len(fb.specific_boroughs) > 1 THEN 'Multiple'
                     WHEN len(fb.boroughs) > 0 THEN 'Citywide'
                     END AS borough,
-               fb.boroughs, fb.community_boards, fb.current_phase,
+               fb.boroughs, fb.community_boards,
+               {_canonical_phase_expr('fb.current_phase')} AS current_phase,
                {_normalized_phase_expr('fb.current_phase')} AS phase_norm,
                fb.actual_construction_end, fb.actual_design_start, fb.forecast_completion,
                sx.variance_day,

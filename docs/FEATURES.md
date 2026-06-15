@@ -5,7 +5,7 @@
 > and bump the "Last updated" date. This file is the canonical inventory of what
 > the server does and the rules it encodes.
 >
-> _Last updated: 2026-06-12_
+> _Last updated: 2026-06-15_
 
 The MCP serves NYC Capital Projects data (4 Socrata datasets) over a local DuckDB,
 with domain rules baked in so callers don't have to rediscover them.
@@ -129,7 +129,19 @@ with domain rules baked in so callers don't have to rediscover them.
   loaded words ("slippage", "overrun"), which map only to the increasing side.
 - **Presence = the active flag** — every project here is a currently-reportable active
   capital project; there is no separate status flag.
-- **Reporting cadence ends 01/05/09** (Jan/May/Sep); **spend reports only those periods.**
+- **Lifecycle & reporting obligation.** Phases run **Pre-Design → Design → Construction
+  Procurement → Construction → Close-out**. A **schedule (PID) is reported only from the
+  start of Design through the end of Construction** — Pre-Design and Close-out carry no
+  schedule progression (NULL milestones there are suppressed-by-rule, not missing). The
+  construction end date is the **"substantial completion"** date (`actual_construction_end`).
+  A **budget (FMS) is reported as long as its funding line is active**, which outlives
+  construction — so a finished project (`lifecycle_status = 'completed'`) **stays present,
+  sometimes for years**, because its budget line is still open. *Completed-but-present is
+  normal:* presence means an active budget line, not active construction — never read a
+  present project as work-in-progress. (At 202601, ~1,221 present PIDs are already
+  `completed`.)
+- **Reporting cadence ends 01/05/09** (Jan/May/Sep) — the whole report publishes **3×/year,
+  mandated by the City's Commitment Plan**; **spend reports only those periods.**
 - **Null forecast dates usually mean "suppressed," not "missing."**
 - **RAW tables are all VARCHAR** — cast in SQL (e.g. `CAST(total_budget AS DOUBLE)`).
 - **13 schedule-executor agencies**; some agencies are budget-holders only.
