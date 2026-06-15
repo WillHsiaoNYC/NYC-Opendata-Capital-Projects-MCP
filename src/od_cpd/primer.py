@@ -19,7 +19,10 @@ when an id resolves to multiple counterparts, LIST ALL, never silently pick one.
 Schedule questions (phase, completion, delay) read the schedule side (PID); budget
 questions (spend, total budget, over-budget) read the budget side (FMS ID).
 managing_agency means the EXECUTOR on schedule rows and the BUDGET-HOLDER on budget
-rows — a budget-holder does not necessarily build anything.
+rows — a budget-holder does not necessarily build anything. The 13 real schedule
+managers are exactly the distinct managing_agency values on the SCHEDULE side; the
+BUDGET side's managing_agency is a superset (~25) whose extra ~12 names are
+budget-holders/clients that never manage a schedule, not real managers.
 
 Terminology: report neutral, SIGNED values ("moved 45 days later", "budget grew
 $2.1M"). Do not echo loaded words ("slippage", "overrun"); they map to the

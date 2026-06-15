@@ -144,7 +144,15 @@ with domain rules baked in so callers don't have to rediscover them.
   mandated by the City's Commitment Plan**; **spend reports only those periods.**
 - **Null forecast dates usually mean "suppressed," not "missing."**
 - **RAW tables are all VARCHAR** — cast in SQL (e.g. `CAST(total_budget AS DOUBLE)`).
-- **13 schedule-executor agencies**; some agencies are budget-holders only.
+- **13 schedule-executor agencies** — these **are** the distinct `managing_agency` values
+  in the *schedule* dataset (CUNY, DCAS, DDC, DEP, DHS, DOC, DOHMH, DOT, DPR, DSNY, EDC,
+  FDNY, NYPD), and exactly the set flagged `is_schedule_executor` in `agency_dim`. The
+  *budget* dataset's `managing_agency` is a **superset (~25)**: the same 13 plus ~12
+  budget-holders/clients (DOE, HPD, NYPL, ACS, …) that **never manage a schedule** — so a
+  name appearing only in budget-side `managing_agency` is a budget-holder, **not** a real
+  manager. (Being a schedule executor is a separate question from the attribution lens:
+  per §4 only DDC/DCAS/EDC default to the *managing* view; the other 10 are owner-agencies
+  whose "their projects" defaults to *sponsor*.)
 - **Schedule history is floored at 202305** (the window's first period) — cumulative
   slippage before that is truncated (a floor, not the true project baseline).
 - **Variance is period-over-period by default**; cumulative = telescoped sum of per-period
