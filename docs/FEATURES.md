@@ -5,7 +5,7 @@
 > and bump the "Last updated" date. This file is the canonical inventory of what
 > the server does and the rules it encodes.
 >
-> _Last updated: 2026-06-15_
+> _Last updated: 2026-06-16_
 
 The MCP serves NYC Capital Projects data (4 Socrata datasets) over a local DuckDB,
 with domain rules baked in so callers don't have to rediscover them.
@@ -46,6 +46,12 @@ with domain rules baked in so callers don't have to rediscover them.
 - **PID = a SCHEDULE** (what's built and when); **FMS ID = a BUDGET** (a funding source).
 - **They are many-to-many:** one FMS ID may fund several PIDs; one PID may be funded by
   several FMS IDs. Most are 1:1; ~3% fan out — **list all, never silently pick one.**
+- **Directionally asymmetric.** Every PID has **≥1 FMS** ("no budget, no work" — 0 PIDs
+  lack a budget at 202601). The reverse fails often: **~45% of budget lines have no
+  schedule** (2,497 of 5,490 in the join at 202601), because a budget can exist before its
+  project reaches **Design** (when schedule reporting starts) and pass-through / expense /
+  certain line types never require a schedule. A budget with no PID is **normal, not missing
+  data**.
 - Schedule questions read the PID side; budget questions read the FMS side.
 - `managing_agency` = **executor** on schedule rows, **budget-holder** on budget rows
   (a budget-holder does not necessarily build anything).
@@ -62,6 +68,28 @@ with domain rules baked in so callers don't have to rediscover them.
   separate first-budget system (adoption month as pseudo-period, any calendar month).
   They live in `original_budget`; `lifetime_budget_variance.original_budget` prefers
   the adopted amount (`original_budget_source='adopted'`, else `'first_snapshot'`).
+
+### The four source datasets and their grain
+
+| Socrata dataset | Shape | Key / grain | PID | FMS ID |
+|---|---|---|:--:|:--:|
+| Citywide **Schedule History & Variance** (`95tx`) | pure SCHEDULE | PID | ✅ | ❌ |
+| Citywide **Budget Spend History & Variance** (`qj5n`) | pure BUDGET | `(fms_id, managing_agency)` | ❌ | ✅ |
+| Citywide **Budget by Fiscal Year** (`gyhf`) | pure BUDGET (city / non-city FY split) | `(fms_id, managing_agency, fiscal_year)` | ❌ | ✅ |
+| Citywide **Budget and Schedule** (`fb86`) | the **JOIN** of schedule × budget | PID × FMS pair (+ line / community-board splits) | ✅ | ✅ |
+
+- **`fb86` is a join**, so a PID or an FMS ID **repeats across rows** on m-to-m fan-out,
+  budget-line/borough splits, or budget-only rows with a **NULL `pid`**. **Dedup before
+  counting** — distinct PID for schedule counts; distinct `(fms_id, managing_agency)` for
+  budget sums.
+- It is the **only place `fms_id` and `sponsor_agency` co-occur** — hence `fms_sponsor` is
+  derived from it (§4).
+- **Managing agency is defined by the schedule side only** — the 13 `is_schedule_executor`
+  agencies in `95tx`. The budget side's `managing_agency` is a budget-holder label whose
+  ~25-name superset includes ~12 client/holders that never manage a schedule (full list and
+  the attribution-lens nuance in §5).
+
+These four raw datasets are normalized into the tables in §6.
 
 ## 3. Sponsor-driven category taxonomy
 
@@ -147,10 +175,11 @@ with domain rules baked in so callers don't have to rediscover them.
 - **13 schedule-executor agencies** — these **are** the distinct `managing_agency` values
   in the *schedule* dataset (CUNY, DCAS, DDC, DEP, DHS, DOC, DOHMH, DOT, DPR, DSNY, EDC,
   FDNY, NYPD), and exactly the set flagged `is_schedule_executor` in `agency_dim`. The
-  *budget* dataset's `managing_agency` is a **superset (~25)**: the same 13 plus ~12
-  budget-holders/clients (DOE, HPD, NYPL, ACS, …) that **never manage a schedule** — so a
-  name appearing only in budget-side `managing_agency` is a budget-holder, **not** a real
-  manager. (Being a schedule executor is a separate question from the attribution lens:
+  *budget* dataset's `managing_agency` is a **superset (~25)**: the same 13 plus 12
+  budget-holders/clients (ACS, BPL, DCLA, DFTA, DOE, HHC, HPD, HRA, NYPL, NYRL, OTI, QPL)
+  that **never manage a schedule** — so a name appearing only in budget-side `managing_agency`
+  is a budget-holder, **not** a real manager. A client can land here when it holds a budget
+  line before any schedule exists (early allocation). (Being a schedule executor is a separate question from the attribution lens:
   per §4 only DDC/DCAS/EDC default to the *managing* view; the other 10 are owner-agencies
   whose "their projects" defaults to *sponsor*.)
 - **Schedule history is floored at 202305** (the window's first period) — cumulative
