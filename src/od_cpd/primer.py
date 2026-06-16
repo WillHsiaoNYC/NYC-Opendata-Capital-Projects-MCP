@@ -14,15 +14,26 @@ project. Presence IS the active flag — there is no separate status flag.
 "Project" is ambiguous. PID identifies a SCHEDULE (what is built and when); FMS ID
 identifies a BUDGET (a funding source). These are MANY-TO-MANY: one FMS ID may fund
 several PIDs; one PID may be funded by several FMS IDs. Most are 1:1; ~3% fan out —
-when an id resolves to multiple counterparts, LIST ALL, never silently pick one.
+when an id resolves to multiple counterparts, LIST ALL, never silently pick one. The
+link is also DIRECTIONALLY asymmetric: every PID has >=1 FMS (no budget, no work), but
+many FMS have NO PID (~45%) — a budget can exist before its project reaches Design, and
+pass-through/expense lines never require a schedule — so a budget with no schedule is
+NORMAL, not missing data.
+
+Four source datasets, three shapes. The SCHEDULE dataset is schedule-only (PID-keyed,
+NO fms_id). The BUDGET-SPEND and FY-BUDGET datasets are budget-only (keyed by (fms_id,
+managing_agency), NO pid). The BUDGET-AND-SCHEDULE dataset is the JOIN of the two, so one
+PID or one FMS ID can appear on MANY rows — DEDUP to the grain you want (distinct PID, or
+distinct (fms_id, managing_agency)) before you count.
 
 Schedule questions (phase, completion, delay) read the schedule side (PID); budget
-questions (spend, total budget, over-budget) read the budget side (FMS ID).
-managing_agency means the EXECUTOR on schedule rows and the BUDGET-HOLDER on budget
-rows — a budget-holder does not necessarily build anything. The 13 real schedule
-managers are exactly the distinct managing_agency values on the SCHEDULE side; the
-BUDGET side's managing_agency is a superset (~25) whose extra ~12 names are
-budget-holders/clients that never manage a schedule, not real managers.
+questions (spend, total budget, over-budget) read the budget side (FMS ID). A MANAGING
+AGENCY owns and submits a SCHEDULE — exactly the 13 distinct managing_agency values on the
+schedule side (flagged is_schedule_executor), and that list is authoritative. On BUDGET rows
+managing_agency is only the budget-HOLDER: a client can hold a line before any schedule
+exists (early allocation), so the budget side is a SUPERSET that includes holder/client
+names (e.g. NYPL) which NEVER manage a schedule. Never promote a budget-side-only name to
+"manager".
 
 Terminology: report neutral, SIGNED values ("moved 45 days later", "budget grew
 $2.1M"). Do not echo loaded words ("slippage", "overrun"); they map to the
