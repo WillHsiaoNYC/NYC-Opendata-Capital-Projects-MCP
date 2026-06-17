@@ -41,13 +41,13 @@ This isn't only a query tool. Point an AI agent at it and **a single prompt prod
 polished, self-contained interactive HTML report** — with the domain rules already applied.
 Three real examples (one prompt → one file; click to open the live report):
 
-**1 · PID ↔ FMS topology** — *the many-to-many anatomy of the portfolio*
+**1 · Schedule ↔ Budget topology** — *the many-to-many anatomy of the portfolio*
 
-> Analyze the PID↔FMS many-to-many relationship across NYC capital projects and build a
-> single interactive HTML report — the 1:1-vs-fan-out split, the outlier extremes, a
+> Analyze the schedule and budget many-to-many relationship across NYC capital projects and
+> build a single interactive HTML report — the 1:1-vs-fan-out split, the outlier extremes, a
 > per-agency breakdown, and budget concentration.
 
-▶ **[Open the report](https://raw.githack.com/WillHsiaoNYC/NYC-Opendata-Capital-Projects-MCP/main/docs/examples/pid_fms_budget_analysis.html)** — fan-out rings, a bipartite diagram, the "tangled few" outliers (hover to see the real PIDs and FMS lines), an agency scatter, and a budget concentration curve.
+▶ **[Open the report](https://raw.githack.com/WillHsiaoNYC/NYC-Opendata-Capital-Projects-MCP/main/docs/examples/pid_fms_budget_analysis.html)** — fan-out rings, a bipartite diagram, the "tangled few" outliers (hover to see the real schedules and budget lines), an agency scatter, and a budget concentration curve.
 
 **2 · Parks projects over $50M** — *every big build, and what funds it*
 
