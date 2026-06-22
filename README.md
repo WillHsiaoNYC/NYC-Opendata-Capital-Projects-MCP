@@ -47,14 +47,14 @@ Three real examples (one prompt → one file; click to open the live report):
 > build a single interactive HTML report — the 1:1-vs-fan-out split, the outlier extremes, a
 > per-agency breakdown, and budget concentration.
 
-▶ **[Open the report](https://raw.githack.com/WillHsiaoNYC/NYC-Opendata-Capital-Projects-MCP/main/docs/examples/pid_fms_budget_analysis.html)** — fan-out rings, a bipartite diagram, the "tangled few" outliers (hover to see the real schedules and budget lines), an agency scatter, and a budget concentration curve.
+▶ **[Open the report](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/examples/pid_fms_budget_analysis.html)** — fan-out rings, a bipartite diagram, the "tangled few" outliers (hover to see the real schedules and budget lines), an agency scatter, and a budget concentration curve.
 
 **2 · Parks projects over $50M** — *every big build, and what funds it*
 
 > Build an interactive one-file HTML report on NYC Parks projects over $50M. For each
 > budget line, show every schedule associated with it, with phase and forecast completion.
 
-▶ **[Open the report](https://raw.githack.com/WillHsiaoNYC/NYC-Opendata-Capital-Projects-MCP/main/docs/examples/parks_over_50m.html)** — 23 budget lines; hover any to reveal its linked schedules. Quietly applies the category taxonomy, so the $1.9B "Park Pedestrian Bridges" route to Bridges, not Parks.
+▶ **[Open the report](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/examples/parks_over_50m.html)** — 23 budget lines; hover any to reveal its linked schedules. Quietly applies the category taxonomy, so the $1.9B "Park Pedestrian Bridges" route to Bridges, not Parks.
 
 **3 · Budget & schedule change monitor** — *what moved this period, by agency*
 
@@ -62,10 +62,10 @@ Three real examples (one prompt → one file; click to open the live report):
 > changes by managing agency, with a click-through detail view for each project's schedule
 > and budget history.
 
-▶ **[Open the report](https://raw.githack.com/WillHsiaoNYC/NYC-Opendata-Capital-Projects-MCP/main/docs/examples/cpd_budget_schedule_change_monitor.html)** — KPIs, a trend chart, a sortable watchlist, and a per-project popup with schedule-variance bars and a stacked budget-vs-spend chart.
+▶ **[Open the report](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/examples/cpd_budget_schedule_change_monitor.html)** — KPIs, a trend chart, a sortable watchlist, and a per-project popup with schedule-variance bars and a stacked budget-vs-spend chart.
 
 > Each report was generated from the prompt shown, then lightly polished. The figures are a
-> snapshot of reporting period 202601 (links render via [raw.githack](https://raw.githack.com)).
+> snapshot of reporting period 202601 — browse all three in the [report gallery](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/).
 
 ## 🚀 Quick Start
 

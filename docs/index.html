@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NYC Capital Projects — Report Gallery · OD-CPD MCP</title>
+<meta name="description" content="Three interactive analyses of New York City's capital portfolio, each generated from a single prompt to the OD-CPD MCP server.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,900&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0A0E17;
+  --ink-2:#10182A;
+  --panel:#0F1626;
+  --panel-edge:rgba(120,170,210,.14);
+  --paper:#E9E6DC;
+  --muted:#8A93A8;
+  --faint:#5B6478;
+  --cyan:#4FD2E8;
+  --cyan-deep:#1C7E93;
+  --amber:#F4A340;
+  --orange:#FF6B3D;
+  --grid:rgba(120,170,210,.06);
+  --grid-strong:rgba(120,170,210,.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--ink);
+  color:var(--paper);
+  font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-weight:300;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+/* blueprint grid backdrop */
+body::before{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:
+    linear-gradient(var(--grid) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid) 1px,transparent 1px),
+    linear-gradient(var(--grid-strong) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid-strong) 1px,transparent 1px);
+  background-size:32px 32px,32px 32px,160px 160px,160px 160px;
+  mask-image:radial-gradient(ellipse 120% 80% at 50% 0%,#000 35%,transparent 90%);
+}
+body::after{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(900px 500px at 82% -8%,rgba(79,210,232,.10),transparent 60%),
+             radial-gradient(760px 620px at 4% 18%,rgba(244,163,64,.06),transparent 55%);
+}
+.wrap{position:relative;z-index:1;max-width:1120px;margin:0 auto;padding:0 28px}
+
+/* ---------- type ---------- */
+.display{font-family:"Fraunces",serif;font-weight:400;letter-spacing:-.01em;line-height:1.02}
+.kicker{font-size:12px;letter-spacing:.34em;text-transform:uppercase;color:var(--cyan);font-weight:500}
+b{color:var(--amber);font-weight:500}
+em{color:var(--paper);font-style:italic}
+
+/* ---------- nav ---------- */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:50;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 28px;
+  background:rgba(10,14,23,.72);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--panel-edge);
+}
+nav .brand{font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--paper);display:flex;gap:10px;align-items:center}
+nav .brand .dot{width:8px;height:8px;background:var(--cyan);border-radius:50%;box-shadow:0 0 12px var(--cyan)}
+nav a.repo{color:var(--muted);text-decoration:none;font-size:11px;letter-spacing:.14em;text-transform:uppercase;transition:color .2s,border-color .2s;border:1px solid var(--panel-edge);padding:6px 12px;border-radius:3px}
+nav a.repo:hover{color:var(--cyan);border-color:var(--cyan-deep)}
+
+/* ---------- hero ---------- */
+header{min-height:86vh;display:flex;flex-direction:column;justify-content:center;padding:130px 0 70px}
+header .eyebrow{display:flex;gap:16px;align-items:center;margin-bottom:30px}
+header .eyebrow .rule{height:1px;width:60px;background:var(--cyan-deep)}
+header h1{font-size:clamp(46px,9vw,116px);margin:6px 0 0}
+header h1 .l2{color:var(--faint)}
+header .sub{max-width:680px;margin-top:30px;font-size:clamp(15px,1.7vw,18px);color:var(--muted)}
+header .meta{display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:42px}
+header .meta span{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--faint)}
+header .meta span b{color:var(--cyan);font-weight:500}
+.scrollcue{margin-top:56px;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint);display:flex;align-items:center;gap:12px}
+.scrollcue .ln{height:1px;width:40px;background:var(--faint);animation:pull 2.4s ease-in-out infinite}
+@keyframes pull{0%,100%{width:24px;opacity:.4}50%{width:54px;opacity:1}}
+
+/* ---------- gallery ---------- */
+.gallery{padding:24px 0 40px;display:flex;flex-direction:column;gap:30px}
+.plate{
+  position:relative;display:grid;grid-template-columns:300px 1fr;
+  background:var(--panel);border:1px solid var(--panel-edge);border-radius:5px;
+  text-decoration:none;color:inherit;overflow:hidden;
+  transition:border-color .3s,transform .3s,box-shadow .3s;
+}
+.plate:hover{border-color:var(--cyan-deep);transform:translateY(-3px);
+  box-shadow:0 18px 50px -20px rgba(0,0,0,.7),0 0 0 1px rgba(79,210,232,.12)}
+.plate:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+/* corner drafting ticks */
+.plate .corner{position:absolute;width:11px;height:11px;border-color:var(--cyan-deep);opacity:.5;transition:opacity .3s;z-index:2}
+.plate:hover .corner{opacity:1}
+.plate .corner.tl{top:8px;left:8px;border-top:1px solid;border-left:1px solid}
+.plate .corner.tr{top:8px;right:8px;border-top:1px solid;border-right:1px solid}
+.plate .corner.bl{bottom:8px;left:8px;border-bottom:1px solid;border-left:1px solid}
+.plate .corner.br{bottom:8px;right:8px;border-bottom:1px solid;border-right:1px solid}
+
+/* glyph cell */
+.plate .glyph{
+  position:relative;border-right:1px solid var(--panel-edge);
+  background:
+    linear-gradient(var(--grid) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid) 1px,transparent 1px),
+    var(--ink-2);
+  background-size:20px 20px,20px 20px,auto;
+  display:flex;align-items:center;justify-content:center;padding:26px 26px 58px;min-height:240px;
+}
+.plate .glyph svg{width:100%;height:auto;max-width:240px;overflow:visible}
+/* drafting title block */
+.plate .tagblk{
+  position:absolute;bottom:0;left:0;right:0;border-top:1px solid var(--panel-edge);
+  display:grid;grid-template-columns:1fr 1fr 1fr;background:rgba(10,14,23,.55);
+}
+.plate .tagblk div{padding:7px 10px;border-right:1px solid var(--panel-edge)}
+.plate .tagblk div:last-child{border-right:0}
+.plate .tagblk .k{font-size:8px;letter-spacing:.14em;color:var(--faint);text-transform:uppercase;display:block;margin-bottom:2px}
+.plate .tagblk .v{font-size:10px;color:var(--muted);letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* content cell */
+.plate .body{padding:34px 36px 30px;display:flex;flex-direction:column}
+.plate .eyebrow{font-size:11px;letter-spacing:.26em;text-transform:uppercase;font-weight:500;margin-bottom:14px}
+.plate.t1 .eyebrow,.plate.t3 .eyebrow{color:var(--cyan)}
+.plate.t2 .eyebrow{color:var(--amber)}
+.plate h2{font-family:"Fraunces",serif;font-weight:500;font-size:clamp(24px,3.4vw,33px);line-height:1.05;letter-spacing:-.01em}
+.plate .tagline{font-family:"Fraunces",serif;font-style:italic;font-weight:300;color:var(--muted);font-size:16px;margin-top:8px}
+.plate p.desc{color:var(--muted);font-size:13.5px;margin-top:18px;max-width:54ch}
+.plate p.desc b{color:var(--paper);font-weight:400}
+.plate .open{margin-top:auto;padding-top:24px;display:inline-flex;align-items:center;gap:10px;
+  font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--paper)}
+.plate .open .arw{transition:transform .3s;color:var(--cyan)}
+.plate.t2 .open .arw{color:var(--amber)}
+.plate:hover .open .arw{transform:translateX(6px)}
+
+@media(max-width:760px){
+  .plate{grid-template-columns:1fr}
+  .plate .glyph{border-right:0;border-bottom:1px solid var(--panel-edge);min-height:210px}
+  .plate .body{padding:28px 24px 26px}
+}
+
+/* ---------- footer ---------- */
+footer{border-top:1px solid var(--panel-edge);margin-top:40px;padding:46px 0 80px;color:var(--faint);font-size:12px}
+footer .grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:26px}
+footer .grid h4{font-family:"Fraunces",serif;color:var(--paper);font-weight:500;font-size:16px;margin-bottom:10px}
+footer .grid .lbl{display:block;text-transform:uppercase;letter-spacing:.14em;font-size:10px;color:var(--muted);margin-bottom:6px}
+footer a{color:var(--cyan);text-decoration:none}
+footer a:hover{text-decoration:underline}
+footer .colo{margin-top:30px;font-size:11px;color:var(--faint);line-height:1.7}
+@media(max-width:680px){footer .grid{grid-template-columns:1fr;gap:22px}}
+
+/* ---------- reveal ---------- */
+.reveal{opacity:0;transform:translateY(22px);transition:opacity .8s ease,transform .8s cubic-bezier(.2,.8,.2,1)}
+.reveal.in{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){
+  .reveal{opacity:1!important;transform:none!important;transition:none}
+  .scrollcue .ln{animation:none}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="brand"><span class="dot"></span>OD · CPD · REPORT GALLERY</div>
+  <a class="repo" href="https://github.com/WillHsiaoNYC/NYC-Opendata-Capital-Projects-MCP" target="_blank" rel="noopener">View source ↗</a>
+</nav>
+
+<div class="wrap">
+
+  <!-- HERO -->
+  <header>
+    <div class="eyebrow"><span class="rule"></span><span class="kicker">NYC Capital Projects · Open Data</span></div>
+    <h1 class="display">One prompt,<br><span class="l2">one report.</span></h1>
+    <p class="sub">Three interactive analyses of New York City's capital portfolio — each generated from a <em>single prompt</em> to the OD-CPD MCP server, with the domain rules (PID↔FMS many-to-many, role-aware agency attribution, signed variance) already baked in.</p>
+    <div class="meta">
+      <span>Source · <b>NYC Open Data</b></span>
+      <span>4 Socrata sets → <b>DuckDB</b></span>
+      <span>Served over <b>MCP</b></span>
+      <span>Period · <b>202601</b></span>
+    </div>
+    <div class="scrollcue"><span class="ln"></span>Three sheets below</div>
+  </header>
+
+  <!-- GALLERY -->
+  <main class="gallery">
+
+    <!-- PLATE 1 -->
+    <a class="plate t1 reveal" href="examples/pid_fms_budget_analysis.html">
+      <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+      <div class="glyph">
+        <svg viewBox="0 0 240 200" role="img" aria-label="Bipartite fan-out diagram: one schedule funded by many budget lines">
+          <!-- 1:1 pairs -->
+          <g stroke="#56708f" stroke-width="1.4" opacity=".55">
+            <line x1="46" y1="26" x2="194" y2="26"/>
+            <line x1="46" y1="48" x2="194" y2="48"/>
+          </g>
+          <g fill="#56708f"><circle cx="46" cy="26" r="3.2"/><circle cx="194" cy="26" r="3.2"/><circle cx="46" cy="48" r="3.2"/><circle cx="194" cy="48" r="3.2"/></g>
+          <!-- fan-out hub -->
+          <circle cx="58" cy="128" r="15" fill="none" stroke="#1C7E93" stroke-width="1.2" opacity=".7"/>
+          <g fill="none" stroke="#4FD2E8" stroke-width="1.7" stroke-linecap="round" opacity=".9">
+            <path d="M58 128 C 110 92, 140 86, 192 84"/>
+            <path d="M58 128 C 110 112, 140 108, 192 108"/>
+            <path d="M58 128 C 110 134, 140 134, 192 134"/>
+            <path d="M58 128 C 110 158, 140 162, 192 162"/>
+          </g>
+          <circle cx="58" cy="128" r="6.5" fill="#0A0E17" stroke="#4FD2E8" stroke-width="2"/>
+          <g fill="#0A0E17" stroke="#F4A340" stroke-width="2">
+            <circle cx="192" cy="84" r="4.4"/><circle cx="192" cy="108" r="4.4"/>
+            <circle cx="192" cy="134" r="4.4"/><circle cx="192" cy="162" r="4.4"/>
+          </g>
+        </svg>
+      </div>
+      <div class="body">
+        <span class="eyebrow">Topology</span>
+        <h2>Schedule ↔ Budget topology</h2>
+        <div class="tagline">the many-to-many anatomy of the portfolio</div>
+        <p class="desc">Fan-out rings, a bipartite diagram, the <b>“tangled few”</b> outliers — hover to see the real schedules and budget lines — an agency scatter, and a budget concentration curve.</p>
+        <span class="open">Open report <span class="arw">→</span></span>
+      </div>
+      <div class="tagblk">
+        <div><span class="k">Drawing</span><span class="v">pid_fms_budget</span></div>
+        <div><span class="k">Period</span><span class="v">202601</span></div>
+        <div><span class="k">Source</span><span class="v">NYC OpenData</span></div>
+      </div>
+    </a>
+
+    <!-- PLATE 2 -->
+    <a class="plate t2 reveal" href="examples/parks_over_50m.html">
+      <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+      <div class="glyph">
+        <svg viewBox="0 0 240 200" role="img" aria-label="Budget concentration bars with linked schedule markers">
+          <g>
+            <rect x="22" y="24"  width="196" height="13" rx="2" fill="#F4A340" opacity=".92"/>
+            <rect x="22" y="52"  width="138" height="13" rx="2" fill="#F4A340" opacity=".78"/>
+            <rect x="22" y="80"  width="104" height="13" rx="2" fill="#F4A340" opacity=".64"/>
+            <rect x="22" y="108" width="78"  height="13" rx="2" fill="#F4A340" opacity=".5"/>
+            <rect x="22" y="136" width="54"  height="13" rx="2" fill="#F4A340" opacity=".4"/>
+            <rect x="22" y="164" width="38"  height="13" rx="2" fill="#F4A340" opacity=".32"/>
+          </g>
+          <!-- linked-schedule markers -->
+          <g stroke="#4FD2E8" stroke-width="2"><line x1="218" y1="22" x2="218" y2="39"/><line x1="160" y1="50" x2="160" y2="67"/><line x1="126" y1="78" x2="126" y2="95"/></g>
+          <g fill="#4FD2E8"><circle cx="218" cy="30.5" r="3"/><circle cx="160" cy="58.5" r="3"/><circle cx="126" cy="86.5" r="3"/></g>
+        </svg>
+      </div>
+      <div class="body">
+        <span class="eyebrow">Parks · $50M+</span>
+        <h2>Parks projects over $50M</h2>
+        <div class="tagline">every big build, and what funds it</div>
+        <p class="desc">23 budget lines; hover any to reveal its linked schedules. Quietly applies the category taxonomy, so the <b>$1.9B “Park Pedestrian Bridges”</b> route to Bridges, not Parks.</p>
+        <span class="open">Open report <span class="arw">→</span></span>
+      </div>
+      <div class="tagblk">
+        <div><span class="k">Drawing</span><span class="v">parks_over_50m</span></div>
+        <div><span class="k">Period</span><span class="v">202601</span></div>
+        <div><span class="k">Source</span><span class="v">NYC OpenData</span></div>
+      </div>
+    </a>
+
+    <!-- PLATE 3 -->
+    <a class="plate t3 reveal" href="examples/cpd_budget_schedule_change_monitor.html">
+      <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+      <div class="glyph">
+        <svg viewBox="0 0 240 200" role="img" aria-label="Variance trend line with per-period delta bars">
+          <line x1="22" y1="150" x2="222" y2="150" stroke="#1C7E93" stroke-width="1" opacity=".5"/>
+          <!-- trend line (slippage rising) -->
+          <polyline fill="none" stroke="#4FD2E8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+            points="24,118 60,104 96,112 132,80 168,86 204,44"/>
+          <g fill="#0A0E17" stroke="#4FD2E8" stroke-width="1.8">
+            <circle cx="24" cy="118" r="3"/><circle cx="96" cy="112" r="3"/><circle cx="132" cy="80" r="3"/><circle cx="204" cy="44" r="3"/>
+          </g>
+          <!-- delta bars: amber = grew/later, cyan = reduced -->
+          <g>
+            <rect x="40"  y="124" width="9" height="26" rx="1.5" fill="#F4A340"/>
+            <rect x="74"  y="150" width="9" height="14" rx="1.5" fill="#4FD2E8" opacity=".8"/>
+            <rect x="108" y="116" width="9" height="34" rx="1.5" fill="#F4A340"/>
+            <rect x="142" y="130" width="9" height="20" rx="1.5" fill="#F4A340"/>
+            <rect x="176" y="150" width="9" height="22" rx="1.5" fill="#4FD2E8" opacity=".8"/>
+          </g>
+        </svg>
+      </div>
+      <div class="body">
+        <span class="eyebrow">Change monitor</span>
+        <h2>Budget &amp; schedule change monitor</h2>
+        <div class="tagline">what moved this period, by agency</div>
+        <p class="desc">KPIs, a trend chart, a sortable watchlist, and a per-project popup with <b>schedule-variance bars</b> and a stacked budget-vs-spend chart.</p>
+        <span class="open">Open report <span class="arw">→</span></span>
+      </div>
+      <div class="tagblk">
+        <div><span class="k">Drawing</span><span class="v">change_monitor</span></div>
+        <div><span class="k">Period</span><span class="v">202601</span></div>
+        <div><span class="k">Source</span><span class="v">NYC OpenData</span></div>
+      </div>
+    </a>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="grid">
+      <div>
+        <h4>About</h4>
+        Each report is a single self-contained HTML file, generated from one prompt to the
+        <a href="https://github.com/WillHsiaoNYC/NYC-Opendata-Capital-Projects-MCP" target="_blank" rel="noopener">OD-CPD MCP server</a>
+        and lightly polished. Figures are a snapshot of reporting period 202601.
+      </div>
+      <div>
+        <span class="lbl">Data</span>
+        NYC Open Data —<br>Capital Projects Dashboard<br>(4 Socrata datasets)
+      </div>
+      <div>
+        <span class="lbl">Stack</span>
+        DuckDB · Python<br>Model Context Protocol
+      </div>
+    </div>
+    <div class="colo">PID = schedule identity · FMS&nbsp;ID = budget identity · the two are many-to-many by design.<br>Values reported neutrally, as committed totals.</div>
+  </footer>
+
+</div>
+
+<script>
+/* scroll reveal — progressive enhancement; content is fully styled without it */
+(function(){
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var els = document.querySelectorAll('.reveal');
+  if(reduce || !('IntersectionObserver' in window)){
+    els.forEach(function(el){el.classList.add('in');}); return;
+  }
+  var io = new IntersectionObserver(function(es){
+    es.forEach(function(en){ if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target); } });
+  },{threshold:.2});
+  els.forEach(function(el){io.observe(el);});
+})();
+</script>
+</body>
+</html>
