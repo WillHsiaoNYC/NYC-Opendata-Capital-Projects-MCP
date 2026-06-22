@@ -340,12 +340,12 @@ footer .meta div span{color:var(--muted);display:block;text-transform:uppercase;
       <div class="cell pid">
         <div class="tag">PID — the schedule side</div>
         <h3 class="display">What is built &amp; when</h3>
-        <p>Phase, forecast completion, delay. Read for anything time-related. 3,001 active schedules this period.</p>
+        <p>Phase, forecast completion, delay. Read for anything time-related. 3,003 active schedules this period.</p>
       </div>
       <div class="cell fms">
         <div class="tag">FMS ID — the budget side</div>
         <h3 class="display">Where money comes from</h3>
-        <p>Commitments, spend, budget change. Read for anything dollar-related. 2,993 funding lines tie to a live schedule.</p>
+        <p>Commitments, spend, budget change. Read for anything dollar-related. 3,238 funding lines tie to a live schedule.</p>
       </div>
     </div>
   </header>
@@ -353,13 +353,13 @@ footer .meta div span{color:var(--muted);display:block;text-transform:uppercase;
   <!-- 1. RELATIONSHIP -->
   <section id="relation">
     <div class="sec-head"><span class="num">01</span><h2 class="display">Mostly one-to-one — but the exceptions matter</h2></div>
-    <p class="sec-intro">Across the 3,001 PIDs and 2,993 budget lines active in period 202601, there are 3,125 schedule↔budget links. The vast majority are clean 1:1 pairs. The interesting ~3% fan out — one schedule drawing on several budgets, or one budget bankrolling many schedules. Whenever an ID resolves to multiple counterparts, all of them count; none is silently dropped.</p>
+    <p class="sec-intro">Across the 3,003 PIDs and 3,238 budget lines active in period 202601, there are 3,389 schedule↔budget links. The majority are clean 1:1 pairs. But a meaningful minority fan out — roughly 7% of schedules draw on several budgets, and about 2% of budgets bankroll many schedules. Whenever an ID resolves to multiple counterparts, all of them count; none is silently dropped.</p>
 
     <div class="stats reveal">
-      <div class="s"><div class="v" data-count="3001">0</div><div class="l">Active PIDs · schedules</div></div>
-      <div class="s"><div class="v" data-count="2993">0</div><div class="l">Linked FMS budget lines</div></div>
-      <div class="s"><div class="v" data-count="3125">0</div><div class="l">Schedule ↔ budget links</div></div>
-      <div class="s"><div class="v" data-count="149">0</div><div class="l">IDs that fan out (3.3% / 1.6%)</div></div>
+      <div class="s"><div class="v" data-count="3003">0</div><div class="l">Active PIDs · schedules</div></div>
+      <div class="s"><div class="v" data-count="3238">0</div><div class="l">Linked FMS budget lines</div></div>
+      <div class="s"><div class="v" data-count="3389">0</div><div class="l">Schedule ↔ budget links</div></div>
+      <div class="s"><div class="v" data-count="274">0</div><div class="l">IDs that fan out (6.9% / 2.1%)</div></div>
     </div>
 
     <div style="height:40px"></div>
@@ -369,7 +369,7 @@ footer .meta div span{color:var(--muted);display:block;text-transform:uppercase;
       <p class="cap">Share of each side resolving to exactly one counterpart, period 202601.</p>
       <div class="rings">
         <div class="ring-card pid">
-          <svg viewBox="0 0 180 180" data-ring="pid" data-pct="96.67">
+          <svg viewBox="0 0 180 180" data-ring="pid" data-pct="93.14">
             <circle cx="90" cy="90" r="74" fill="none" stroke="rgba(120,170,210,.10)" stroke-width="14"/>
             <circle class="arc" cx="90" cy="90" r="74" fill="none" stroke="#4FD2E8" stroke-width="14"
               stroke-linecap="round" transform="rotate(-90 90 90)"
@@ -378,10 +378,10 @@ footer .meta div span{color:var(--muted);display:block;text-transform:uppercase;
             <text class="center-sub" x="90" y="104" text-anchor="middle">SINGLE BUDGET</text>
           </svg>
           <div class="title">PID → FMS</div>
-          <div class="detail">2,901 of 3,001 draw on one budget · <b>100</b> split across several</div>
+          <div class="detail">2,797 of 3,003 draw on one budget · <b>206</b> split across several</div>
         </div>
         <div class="ring-card fms">
-          <svg viewBox="0 0 180 180" data-ring="fms" data-pct="98.36">
+          <svg viewBox="0 0 180 180" data-ring="fms" data-pct="97.90">
             <circle cx="90" cy="90" r="74" fill="none" stroke="rgba(120,170,210,.10)" stroke-width="14"/>
             <circle class="arc" cx="90" cy="90" r="74" fill="none" stroke="#F4A340" stroke-width="14"
               stroke-linecap="round" transform="rotate(-90 90 90)"
@@ -390,7 +390,7 @@ footer .meta div span{color:var(--muted);display:block;text-transform:uppercase;
             <text class="center-sub" x="90" y="104" text-anchor="middle">SINGLE SCHEDULE</text>
           </svg>
           <div class="title">FMS → PID</div>
-          <div class="detail">2,944 of 2,993 fund one schedule · <b>49</b> are shared</div>
+          <div class="detail">3,170 of 3,238 fund one schedule · <b>68</b> are shared</div>
         </div>
       </div>
     </div>
@@ -430,7 +430,7 @@ footer .meta div span{color:var(--muted);display:block;text-transform:uppercase;
   <!-- 3. OUTLIERS -->
   <section id="outliers">
     <div class="sec-head"><span class="num">03</span><h2 class="display">The tangled few</h2></div>
-    <p class="sec-intro">The extremes are programmatic. On the budget side, a handful of NYPD city-wide lines (ADA compliance, general police facilities) each bankroll a dozen-plus separate site schedules. On the schedule side, a few complex projects are stitched together from up to five distinct funding sources. And these tangled PIDs are not small — they average <b>$74M</b> versus $40M for single-budget schedules.</p>
+    <p class="sec-intro">The extremes are programmatic. On the budget side, a handful of NYPD city-wide lines (ADA compliance, general police facilities) each bankroll a dozen-plus separate site schedules. On the schedule side, complex projects are stitched together from several distinct funding sources — and Parks' citywide reconstruction programs now lead that pattern. Tangled PIDs also tend to run larger: a median <b>$18M</b> versus $5M for single-budget schedules.</p>
 
     <div class="mono-label" style="margin-bottom:14px">Shared budgets — one FMS line funding many PIDs</div>
     <div class="cards reveal">
@@ -486,7 +486,7 @@ footer .meta div span{color:var(--muted);display:block;text-transform:uppercase;
   <!-- 4. BY MANAGING AGENCY -->
   <section id="agency">
     <div class="sec-head"><span class="num">04</span><h2 class="display">Who tangles, and who stays clean</h2></div>
-    <p class="sec-intro">Thirteen managing agencies execute the 3,001 active schedules. Decomposing the fan-out by executor reveals two opposite behaviors. The construction-manager agencies — <b>DDC</b> and <b>EDC</b> — stitch single schedules together from many budgets (split funding). <b>NYPD</b> does the reverse: a few city-wide budget lines bankroll dozens of precinct sites (shared budgets). Almost everyone else runs an essentially perfect one-to-one shop.</p>
+    <p class="sec-intro">Thirteen managing agencies execute the 3,003 active schedules. Decomposing the fan-out by executor reveals three distinct behaviors. <b>Parks (DPR)</b> is the largest source of split funding: its citywide reconstruction programs — play areas, fencing, synthetic turf — are each a single schedule drawing on a dozen-plus site budget lines (one, PID 2911, spans 14). The construction managers — <b>DDC</b> and <b>EDC</b> — split for a different reason, stitching one schedule from many funding sources on behalf of other agencies. <b>NYPD</b> does the reverse: a few city-wide budget lines bankroll dozens of precinct sites (shared budgets). The remaining agencies run an essentially perfect one-to-one shop.</p>
 
     <div class="panel reveal">
       <h4 class="display">Two ways to tangle — agencies positioned by behavior</h4>
@@ -567,8 +567,8 @@ footer .meta div span{color:var(--muted);display:block;text-transform:uppercase;
 <script>
 /* ============ DATA ============ */
 const DATA = {
-  pidHist: [ {k:'1 budget',n:2901}, {k:'2',n:84}, {k:'3',n:11}, {k:'4',n:2}, {k:'5',n:3} ],
-  fmsHist: [ {k:'1 PID',n:2944}, {k:'2',n:28}, {k:'3',n:8}, {k:'4',n:8}, {k:'5',n:1}, {k:'11',n:1}, {k:'13',n:1}, {k:'15',n:1}, {k:'25',n:1} ],
+  pidHist: [ {k:'1 budget',n:2797}, {k:'2',n:155}, {k:'3',n:24}, {k:'4',n:5}, {k:'5',n:4}, {k:'6–14',n:18} ],
+  fmsHist: [ {k:'1 PID',n:3170}, {k:'2',n:47}, {k:'3',n:8}, {k:'4',n:8}, {k:'5',n:1}, {k:'11',n:1}, {k:'13',n:1}, {k:'15',n:1}, {k:'25',n:1} ],
   seg: [
     {label:'< $1M',      lines:1199, dollars:0.469},
     {label:'$1M–$5M',    lines:1586, dollars:4.209},
@@ -787,14 +787,14 @@ const SPLIT = {
   'BWSOREI26':{n:'REI Service for Emergency Construction Projects',b:10000000,pct:0.0},
   'CB-QW25':{n:'Catch Basins Modernization in the borough of Queens',b:9630000,pct:0.0},
   'HWXJEROME':{n:'Jerome Avenue Safety Improvements (NDF-JEROM)',b:11353000,pct:0.0},
-  'NDF-JEROM':{n:'Jerome Avenue Safety Improvements NDF Funding (HWXJEROME)',b:40699425,pct:11.4},
+  'NDF-JEROM':{n:'Jerome Avenue Safety Improvements NDF Funding (HWXJEROME)',b:40699425,pct:11.3},
   'HED583':{n:'Trunk & Dist WM work on W 177 St, Bronx, HWXJEROME',b:33716958,pct:0.9},
   'HED584':{n:'New Dist WM in Jerome Ave from 164th to 183 St, BX',b:30902687,pct:0.0},
   'HED585':{n:'New Trunk WM install from W 181st & Jerome Ave, BX,HWXJEROME',b:16971002,pct:1.2},
   'SANDY4-31':{n:'Tide Gate - 404 HMGP HBPED800Q',b:443764,pct:63.9},
   'SANDY4-30':{n:'Tide Gate - FEMA 406 In-Kind, HMP & 428 Conduit HBPED800Q',b:1681772,pct:17.3},
   'HBPED800Q':{n:'PED BRIDGE - PORPOISE BR & TIDE GATE(SANDY4-30, 4-31)QED1062',b:60457995,pct:23.4},
-  'QED1062':{n:'WM Lining in Porpoise Bridge Flushing Meadows QNS, HBPED800Q',b:1991133,pct:7.6},
+  'QED1062':{n:'WM Lining in Porpoise Bridge Flushing Meadows QNS, HBPED800Q',b:1991133,pct:7.5},
 };
 document.querySelectorAll('.card.split .chip').forEach(ch=>{
   const id=ch.textContent.trim(), d=SPLIT[id];
@@ -812,7 +812,7 @@ addEventListener('scroll',()=>{const h=document.documentElement;
 
 /* ============ managing-agency data ============ */
 const AG=[
-  {a:'DPR', name:'Parks & Recreation',        pids:1342, pMulti:0,  fms:1333, fShared:9},
+  {a:'DPR', name:'Parks & Recreation',        pids:1344, pMulti:106, fms:1578, fShared:28},
   {a:'DDC', name:'Design & Construction',     pids:641,  pMulti:74, fms:711,  fShared:12},
   {a:'DEP', name:'Environmental Protection',  pids:199,  pMulti:4,  fms:191,  fShared:9},
   {a:'NYPD',name:'Police Department',         pids:177,  pMulti:0,  fms:86,   fShared:17},
@@ -837,7 +837,7 @@ const AG=[
   const plotW=x1-x0-GUT, plotH=y0-y1-GUT;
   const X=v=>x0+GUT+(v/XMAX)*plotW;
   const Y=v=>y0-GUT-(v/YMAX)*plotH;
-  const rOf=d=>6+Math.sqrt(d.pids)/Math.sqrt(1342)*22;
+  const rOf=d=>6+Math.sqrt(d.pids)/Math.sqrt(1344)*22;
   function el(t,a){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e;}
   function color(d){ if(d.split<0.02&&d.shared<0.02) return '#56708f';
     return d.split>=d.shared ? '#FF6B3D' : '#F4A340'; }
