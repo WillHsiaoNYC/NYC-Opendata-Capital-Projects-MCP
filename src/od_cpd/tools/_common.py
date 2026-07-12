@@ -1,8 +1,9 @@
 # src/od_cpd/tools/_common.py
 from __future__ import annotations
 
+from ..config import CADENCE_MONTHS
 from ..dbio import sql_literal
-from ..periods import resolve_current_period
+from ..periods import is_cadence_period, resolve_current_period
 
 
 def interpolate_sql(sql: str, params: list) -> str:
@@ -80,6 +81,34 @@ def current_period(con, table: str = "schedule_history") -> str | None:
         f"SELECT reporting_period, count(*) FROM {table} GROUP BY reporting_period"
     ).fetchall())
     return resolve_current_period(counts)
+
+
+def resolve_period(con, table: str, period: str) -> tuple[str | None, dict | None]:
+    """Resolve a breakdown/stats period, validating any EXPLICIT period up front.
+
+    Returns ``(period, None)`` on success, or ``(None, {"error": ...})`` — an
+    error dict ready to return from the caller. ``period == "current"`` defers to
+    ``current_period`` (keeping its full-period fullness guard). An explicit period
+    is rejected unless it is a cadence period AND actually present in ``table`` — an
+    off-cadence or absent period would otherwise slip into ``reporting_period = ?``,
+    silently match nothing, and return empty groups instead of erroring (the failure
+    mode ``schedule_changes`` forbids). Same voice/wording as ``schedule_changes``.
+    """
+    noun = table.split("_", 1)[0]  # 'schedule_history' -> 'schedule', etc.
+    if period == "current":
+        p = current_period(con, table)
+        if p is None:
+            return None, {"error": f"No {noun} data available — run `od-cpd init`."}
+        return p, None
+    if not is_cadence_period(period):
+        return None, {"error": f"Period must be YYYYMM ending in {'/'.join(CADENCE_MONTHS)} "
+                               "(e.g. 202509); see dataset_info for available periods."}
+    present = con.execute(
+        f"SELECT 1 FROM {table} WHERE reporting_period = ? LIMIT 1", [period]).fetchone()
+    if not present:
+        return None, {"error": f"No {noun} data at period {period}; "
+                               "see dataset_info for available periods."}
+    return period, None
 
 
 def direction_of(value, kind: str = "schedule"):

@@ -55,6 +55,55 @@ def test_schedule_breakdown_variance_no_artifacts_echoes_zero():
     assert "excluded" not in r["label"]    # no noise when nothing was dropped
 
 
+def test_schedule_breakdown_offcadence_period_errors():
+    # '202511' is off-cadence (Nov ∉ Jan/May/Sep) — must error, not silently match nothing.
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    r = schedule_breakdown_from(con, group_by="managing_agency", period="202511")
+    assert "error" in r
+
+
+def test_schedule_breakdown_absent_cadence_period_errors():
+    # '202105' is a valid cadence period but absent from the data — must error.
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    r = schedule_breakdown_from(con, group_by="managing_agency", period="202105")
+    assert "error" in r
+
+
+def test_schedule_breakdown_real_explicit_period_still_works():
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    r = schedule_breakdown_from(con, group_by="managing_agency", period="202601")
+    assert "error" not in r
+    assert r["period"] == "202601"
+
+
+def test_delay_reason_stats_offcadence_period_errors():
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    r = delay_reason_stats_from(con, period="202511")
+    assert "error" in r
+
+
+def test_delay_reason_stats_absent_cadence_period_errors():
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    r = delay_reason_stats_from(con, period="202105")
+    assert "error" in r
+
+
+def test_delay_reason_stats_real_explicit_period_still_works():
+    # 202601 exists (no delay reasons in the fixture → empty list, but NOT an error).
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    r = delay_reason_stats_from(con, period="202601")
+    assert "error" not in r
+    assert r["scope"] == "202601"
+
+
+def test_delay_reason_stats_all_history_ignores_period():
+    # scope='all_history' skips periods entirely — an off-cadence period must not error.
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    r = delay_reason_stats_from(con, period="202511", scope="all_history")
+    assert "error" not in r
+    assert r["scope"] == "all_history"
+
+
 def test_schedule_changes_delayed_returns_pid_101():
     con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
     # 101 has no row at 202509 (absent then = not delayed) and +45 days at 202601
