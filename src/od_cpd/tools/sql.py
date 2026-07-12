@@ -36,7 +36,8 @@ def validate_select(query: str) -> str:
     if ";" in scannable:
         raise ValueError("Only a single statement is allowed.")
     if not re.match(r"(?is)^\s*(SELECT|WITH)\b", q):
-        raise ValueError("Only SELECT/WITH queries are allowed.")
+        raise ValueError("Only SELECT/WITH queries are allowed. For table schemas "
+                         "use the describe_table tool (DESCRIBE/SHOW/PRAGMA are blocked).")
     if _FORBIDDEN.search(scannable):
         raise ValueError("Query contains a forbidden keyword (read-only only).")
     return q

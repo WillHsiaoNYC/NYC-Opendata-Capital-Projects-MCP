@@ -91,3 +91,10 @@ def test_run_sql_note_pluralizes_for_multiple_tables():
     con.execute("CREATE TABLE fms_sponsor AS SELECT 'A' AS fms_id")
     r = run_sql_on(con, "SELECT * FROM fms_location JOIN fms_sponsor USING (fms_id)")
     assert "fms_location, fms_sponsor are all-history" in r["period_basis_note"]
+
+
+def test_describe_rejection_steers_to_describe_table():
+    import pytest
+    from od_cpd.tools.sql import validate_select
+    with pytest.raises(ValueError, match="describe_table"):
+        validate_select("DESCRIBE schedule_history")

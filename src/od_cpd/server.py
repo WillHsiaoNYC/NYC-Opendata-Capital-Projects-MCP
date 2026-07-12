@@ -104,6 +104,16 @@ def describe_field(field: str | None = None, dataset: str | None = None) -> dict
 
 
 @mcp.tool()
+def describe_table(table: str | None = None) -> dict:
+    """Schema catalog for every queryable DuckDB table (typed analytics tables, dims,
+    raw mirrors): live columns + types plus curated grain and keying notes. No arg →
+    catalog of all tables; table=<name> (case-insensitive) → full detail. Use this
+    instead of DESCRIBE/SHOW (blocked in run_sql). Complements describe_field (official
+    field semantics for the 4 raw datasets)."""
+    return _with_conn(lookup.describe_table_from, table)
+
+
+@mcp.tool()
 def resolve_project_reference(query: str) -> dict:
     """Resolve any project identifier (PID, FMS ID, name, partial) → schedule+budget
     matches bucketed by entity. Call this first for any named-project question."""
