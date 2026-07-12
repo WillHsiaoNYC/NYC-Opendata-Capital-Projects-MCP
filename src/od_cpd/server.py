@@ -24,9 +24,11 @@ mcp = FastMCP("od-cpd", instructions=PRIMER)
 # All tools are read-only queries over a read-only connection. run_sql is the one
 # exception: its csv/xlsx modes write a fresh file under exports/ per call —
 # additive (never destructive), but neither read-only nor idempotent.
-_READONLY = ToolAnnotations(readOnlyHint=True, idempotentHint=True)
+# openWorldHint=False everywhere: the local DuckDB is a closed world (no network/
+# external effects), so results depend only on the bundled database.
+_READONLY = ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False)
 _RUN_SQL_NOTES = ToolAnnotations(readOnlyHint=False, destructiveHint=False,
-                                 idempotentHint=False)
+                                 idempotentHint=False, openWorldHint=False)
 
 
 @mcp.tool(annotations=_RUN_SQL_NOTES)
@@ -148,12 +150,13 @@ def get_project_budget(fms_id: str, managing_agency: str | None = None) -> dict:
 def get_project_history(pid: str | None = None, fms_id: str | None = None,
                         managing_agency: str | None = None) -> dict:
     """Period-by-period history for ONE project. Schedule lens (pid=…): each period's
-    phase, forecast, signed variance, delay reason + a current-state header with
-    cumulative variance. Budget lens (fms_id=…, case-insensitive): each period's
-    budget/spend/signed variance per (managing_agency, fms_id) line + the adopted
-    original budget when recorded (adoption-only lines return header-only). Provide
-    exactly one of pid/fms_id; managing_agency scopes a multi-agency FMS id to one
-    line — otherwise ALL lines are listed."""
+    phase, forecast, signed variance, delay reason + a current-state header carrying
+    `agency_project_name`, cumulative variance, and `forecast_past_due` (see
+    get_project_schedule). Budget lens (fms_id=…, case-insensitive): each period's
+    budget/spend/signed variance per (managing_agency, fms_id) line, the line-keyed
+    `fms_project_name`, + the adopted original budget when recorded (adoption-only lines
+    return header-only). Provide exactly one of pid/fms_id; managing_agency scopes a
+    multi-agency FMS id to one line — otherwise ALL lines are listed."""
     return _with_conn(get_project_history_from, pid, fms_id, managing_agency)
 
 
@@ -184,8 +187,10 @@ def schedule_changes(change_type: str, from_period: str, to_period: str,
 def delay_reason_stats(period: str = "current", agency: str | None = None,
                        scope: str = "current", agency_role: str = "auto") -> dict:
     """Distribution of reason-for-delay (only populated when variance>0). Defaults to current
-    period; pass scope='all_history' for lifetime. `agency_role` ('auto'|'sponsor'|'managing')
-    picks owner vs builder lens."""
+    period; pass scope='all_history' for lifetime. Carries a `coverage` block (delayed_total /
+    with_reason / without_reason — the denominator for the distribution, counting delayed rows
+    by bare variance_day>0). `agency_role` ('auto'|'sponsor'|'managing') picks owner vs builder
+    lens."""
     return _with_conn(delay_reason_stats_from, period, agency, scope, agency_role)
 
 

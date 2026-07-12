@@ -174,4 +174,5 @@ def test_schedule_changes_rows_carry_agency_project_name():
         "VALUES ('202509','DDC','DDC','101','A','90','Design','K','Park A')")
     materialize.materialize_all(con)
     r = schedule_changes_from(con, "delayed", from_period="202509", to_period="202601")
+    assert r["changes"]   # non-vacuous: all() over an empty list would pass trivially
     assert all("agency_project_name" in row for row in r["changes"])

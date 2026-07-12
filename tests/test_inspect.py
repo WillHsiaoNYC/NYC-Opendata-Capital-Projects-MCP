@@ -66,6 +66,9 @@ def _history_con():
         "INSERT INTO raw_schedule_history (reporting_period, managing_agency, pid,"
         " current_phase, completion_date, completion_date_type, variance_day) "
         "VALUES ('202509','DDC','101','Design','2026-11-01','Forecast','-10')")
+    # give FMS line A a distinct budget-system name (lines rename across history)
+    con.execute("UPDATE raw_project_detail SET fms_project_name = 'FMS Park A' "
+                "WHERE fms_id = 'A'")
     materialize.materialize_all(con)
     return con
 
@@ -144,3 +147,32 @@ def test_schedule_and_history_surface_forecast_past_due():
     assert get_project_schedule_from(con, "101")["answer"]["forecast_past_due"] is False
     r = get_project_history_from(con, pid="101")
     assert r["current_state"]["forecast_past_due"] is False
+
+
+def test_history_names_on_both_lenses():
+    con = _history_con()
+    # schedule lens: current_state carries the agency project name
+    r_sched = get_project_history_from(con, pid="101")
+    assert r_sched["current_state"]["agency_project_name"] == "Park A"
+    # budget lens: each line carries its line-keyed fms_project_name
+    r_bud = get_project_history_from(con, fms_id="A")
+    line = next(l for l in r_bud["lines"] if l["fms_id"] == "A")
+    assert line["fms_project_name"] == "FMS Park A"
+
+
+def test_history_fms_multi_agency_lists_all_lines():
+    con = duckdb.connect(":memory:"); _raw(con)
+    # FMS id 'A' also held by a second managing agency (DPR) → two distinct lines
+    con.execute(
+        "INSERT INTO raw_project_detail (reporting_period, managing_agency, sponsor_agency,"
+        " pid, fms_id, total_budget, current_phase, borough, agency_project_name) "
+        "VALUES ('202601','DPR','DPR','601','A','70','Construction','Q','Park DPR')")
+    con.execute(
+        "INSERT INTO raw_budget_history (managing_agency, fms_id, year_month_reported,"
+        " total_budget, spend_to_date, budget_variance) "
+        "VALUES ('DPR','A','202601','70','7','0')")
+    materialize.materialize_all(con)
+    r = get_project_history_from(con, fms_id="A")
+    assert len(r["lines"]) == 2
+    assert {l["managing_agency"] for l in r["lines"]} == {"DDC", "DPR"}
+    assert "grain_note" in r

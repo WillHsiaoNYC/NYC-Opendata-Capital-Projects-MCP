@@ -45,6 +45,8 @@ def test_every_tool_is_annotated():
     assert len(tools) >= 17
     for t in tools:
         assert t.annotations is not None, t.name
+        # local DuckDB is a closed world — no tool reaches outside it
+        assert t.annotations.openWorldHint is False, t.name
         if t.name == "run_sql":
             # export modes write files under exports/: not read-only, not idempotent,
             # but additive — never destructive.

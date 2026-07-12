@@ -27,7 +27,7 @@ with domain rules baked in so callers don't have to rediscover them.
 **Schedule analytics**
 - `schedule_breakdown` — counts/averages by agency/sponsor/borough/phase/category. An explicit `period` is validated (off-cadence or absent periods error — no silent empty results). For `metric='schedule_variance'`, `statistic` ∈ {count, mean, median, sum, min, max} — anything else errors (no silent fallback); `count` results carry no direction (unsigned). Variance statistics exclude forecast-placeholder artifacts (|variance| > 36,500 days — the guard shared with `rank_projects`) and echo the dropped count as `excluded_artifacts`. Category grouping counts a PID once in EACH of its line-derived categories (non-additive, caveat in-band)
 - `schedule_changes` — newly completed / newly delayed between two periods. BOTH change types compare `from_period` → `to_period` ("newly delayed" = positive variance at `to`, none at `from`). Periods are validated: off-cadence, inverted, or missing-`to_period` values error; a `from_period` predating the data is allowed and noted; rows carry `agency_project_name`
-- `delay_reason_stats` — distribution of delay reasons; an explicit `period` is validated (off-cadence or absent periods error — no silent empty results), except the `scope='all_history'` path which skips periods; the answer carries `coverage` (delayed_total / with_reason / without_reason) so the distribution has a denominator
+- `delay_reason_stats` — distribution of delay reasons; an explicit `period` is validated (off-cadence or absent periods error — no silent empty results), except the `scope='all_history'` path which skips periods; the answer carries `coverage` (delayed_total / with_reason / without_reason) so the distribution has a denominator. Coverage counts delayed rows by bare `variance_day>0` — the same count basis as `schedule_breakdown`'s `count` metric (no artifact-day guard, which applies only to day-valued statistics)
 - `project_duration_stats` — duration between two actual milestones; optional `group_by` (`managing_agency` | `borough` | `lifecycle_status`) returns per-group stats
 
 **Budget analytics**
@@ -242,7 +242,9 @@ These four raw datasets are normalized into the tables in §6.
   never reads a half-built database.
 - **Curated dictionaries:** `data/agencies.yaml` (agencies), `data/categories.yaml`
   (program categories), and `data/data_dictionary.yaml` (field definitions), each loaded
-  at build time.
+  at build time; plus `data/tables.yaml` — the `describe_table` catalog (grain / keying /
+  column notes) — which is loaded at CALL time (not build time) and overlaid on live
+  `information_schema` columns.
 - **Field definitions:** `data/data_dictionary.yaml` is a one-time extract of the dataset's
   official NYC Open Data data-dictionary XLSX → the `column_dict` table, surfaced via
   `describe_field` and folded into `dataset_info`. Static/curated (re-extract by hand on a

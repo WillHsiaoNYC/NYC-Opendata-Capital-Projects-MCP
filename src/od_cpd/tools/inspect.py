@@ -7,17 +7,25 @@ from ..provenance import provenance_block
 from ._common import interpolate_sql, mm_envelope, signed_metric, VARIANCE_ARTIFACT_DAYS
 
 
+def _current_links(con: duckdb.DuckDBPyConnection, *, where: str, params: list,
+                   select: str) -> list[dict]:
+    # A project's CURRENT counterparts are the link edges at the link table's OWN latest
+    # period. A PID's latest schedule_history snapshot can fall in a period where its fb86
+    # row had a null fms_id (no edge), which would wrongly yield zero linked budgets — the
+    # link table's max period always has fms_id. The budget side mirrors this: all-history
+    # links would resurrect PIDs the line no longer funds.
+    return rows_as_dicts(con,
+        f"SELECT DISTINCT {select} FROM schedule_budget_link "
+        f"WHERE {where} QUALIFY reporting_period = max(reporting_period) OVER ()", params)
+
+
 def get_project_schedule_from(con: duckdb.DuckDBPyConnection, pid: str) -> dict:
     state = rows_as_dicts(con, "SELECT * FROM latest_project_state WHERE pid = ?", [pid])
     if not state:
         return {"error": f"No schedule (PID) found for {pid}"}
     s = state[0]
-    # Use the link table's OWN latest period for this PID: a PID's latest schedule_history
-    # snapshot can be a period where its fb86 row had a null fms_id (no edge), which would
-    # wrongly yield zero linked budgets. The link table's max period always has fms_id.
-    linked = rows_as_dicts(con,
-        "SELECT DISTINCT fms_id, managing_agency FROM schedule_budget_link "
-        "WHERE pid = ? QUALIFY reporting_period = max(reporting_period) OVER ()", [pid])
+    linked = _current_links(con, where="pid = ?", params=[pid],
+                            select="fms_id, managing_agency")
     answer = {
         "pid": pid, "agency": s["managing_agency"], "sponsor_agency": s["sponsor_agency"],
         "borough": s["borough"], "boroughs": s["boroughs"],
@@ -45,11 +53,8 @@ def get_project_budget_from(con: duckdb.DuckDBPyConnection, fms_id: str,
     bud = rows_as_dicts(con, f"SELECT * FROM lifetime_budget_variance WHERE {where}", params)
     if not bud:
         return {"error": f"No budget (FMS line) found for {fms_id}"}
-    # Mirror the schedule side: only links from this line's latest link period are
-    # CURRENT counterparts; all-history links resurrect PIDs the line no longer funds.
-    linked = rows_as_dicts(con,
-        f"SELECT DISTINCT pid, managing_agency FROM schedule_budget_link "
-        f"WHERE {where} QUALIFY reporting_period = max(reporting_period) OVER ()", params)
+    linked = _current_links(con, where=where, params=params,
+                            select="pid, managing_agency")
     env = mm_envelope(anchor_type="budget", anchor_id=fms_id, linked=linked)
     return {"answer": bud, **env,
             "provenance": provenance_block(
@@ -94,12 +99,12 @@ def _schedule_history_answer(con: duckdb.DuckDBPyConnection, pid: str) -> dict:
                      "current_phase": last["current_phase"],
                      "lifecycle_status": last["lifecycle_status"],
                      "cumulative_variance_days": signed_metric(cum[0] if cum else None)}
-    lps = con.execute("SELECT forecast_past_due FROM latest_project_state WHERE pid = ?",
-                      [pid]).fetchone()
+    lps = con.execute("SELECT forecast_past_due, agency_project_name "
+                      "FROM latest_project_state WHERE pid = ?", [pid]).fetchone()
     current_state["forecast_past_due"] = bool(lps[0]) if lps else None
-    linked = rows_as_dicts(con,
-        "SELECT DISTINCT fms_id, managing_agency FROM schedule_budget_link "
-        "WHERE pid = ? QUALIFY reporting_period = max(reporting_period) OVER ()", [pid])
+    current_state["agency_project_name"] = lps[1] if lps else None
+    linked = _current_links(con, where="pid = ?", params=[pid],
+                            select="fms_id, managing_agency")
     env = mm_envelope(anchor_type="schedule", anchor_id=pid, linked=linked)
     return {"current_state": current_state, "periods": rows, **env,
             "provenance": provenance_block(
@@ -123,6 +128,12 @@ def _budget_history_answer(con: duckdb.DuckDBPyConnection, fms_id: str,
     if not snap and not orig:
         return {"error": f"No budget (FMS line) found for {fms_id}"}
     orig_by_line = {(o["fms_id"], o["managing_agency"]): o for o in orig}
+    # line-keyed FMS-system name (latest non-null; budget-only lines with no fb86 row
+    # have no fms_location entry → None). One query covers every line for this id.
+    names = {(r["fms_id"], r["managing_agency"]): r["fms_project_name"]
+             for r in rows_as_dicts(con,
+                 f"SELECT fms_id, managing_agency, fms_project_name "
+                 f"FROM fms_location WHERE {where}", params)}
     keys: list[tuple] = []
     for r in snap + orig:
         k = (r["fms_id"], r["managing_agency"])
@@ -140,6 +151,7 @@ def _budget_history_answer(con: duckdb.DuckDBPyConnection, fms_id: str,
             periods.append(p)
         o = orig_by_line.get(k)
         line = {"fms_id": k[0], "managing_agency": k[1],
+                "fms_project_name": names.get(k),
                 "original_budget": ({"amount": o["original_budget"],
                                      "recorded_period": o["recorded_period"],
                                      "note": "Adoption record (any calendar month), "
@@ -149,9 +161,8 @@ def _budget_history_answer(con: duckdb.DuckDBPyConnection, fms_id: str,
             line["note"] = ("Adoption-only line: an original budget exists but no "
                             "reporting snapshot yet — normal for early allocations.")
         lines.append(line)
-    linked = rows_as_dicts(con,
-        f"SELECT DISTINCT pid, managing_agency FROM schedule_budget_link "
-        f"WHERE {where} QUALIFY reporting_period = max(reporting_period) OVER ()", params)
+    linked = _current_links(con, where=where, params=params,
+                            select="pid, managing_agency")
     env = mm_envelope(anchor_type="budget", anchor_id=fms_id, linked=linked)
     result = {"lines": lines, **env,
               "provenance": provenance_block(

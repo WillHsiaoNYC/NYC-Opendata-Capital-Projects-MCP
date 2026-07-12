@@ -29,3 +29,19 @@ def test_raw_entries_point_to_describe_field():
                     "raw_schedule_history", "raw_budget_history"}
     for n in raws:
         assert "describe_field" in cat[n]["description"]
+
+
+def test_column_notes_keys_exist_in_built_db():
+    # Drift guard: every column_notes key must be a real column of its table, so a
+    # renamed/removed column can't leave an orphaned note in the catalog.
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    cat = load_table_catalog()
+    for name, entry in cat.items():
+        notes = entry.get("column_notes")
+        if not notes:
+            continue
+        cols = {r[0] for r in con.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = ?",
+            [name]).fetchall()}
+        for key in notes:
+            assert key in cols, f"{name}.column_notes['{key}'] is not a real column"

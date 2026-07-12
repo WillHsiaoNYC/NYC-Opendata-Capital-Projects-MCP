@@ -111,15 +111,31 @@ def test_dataset_info_without_typed_tables_still_works(con):
 
 
 def test_dataset_info_available_periods_from_typed_tables():
-    c = _built_con()
+    c = _duckdb.connect(":memory:"); _raw_fixture(c)
+    # a real ADOPTION record (NULL spend, off-cadence month) — must be excluded from the
+    # snapshot period list (it lands in original_budget, not budget_history)
+    c.execute(
+        "INSERT INTO raw_budget_history (managing_agency, fms_id, year_month_reported,"
+        " total_budget, spend_to_date, budget_variance) "
+        "VALUES ('DDC','A','201903','80',NULL,NULL)")
+    # a gyhf fiscal-year row so gyhf's periods come from project_budget_fy
+    c.execute(
+        "INSERT INTO raw_budget_fy (reporting_period, managing_agency, fms_id, fiscal_year,"
+        " total_budget_city_non_city, city, non_city, spend) "
+        "VALUES ('202601','DDC','A','2026','100','60','40','10')")
+    _materialize.materialize_all(c)
     c.execute(
         "INSERT INTO meta VALUES "
         "('fb86-vt7u','reporting_period',1738000000,now(),100,'h',1,'202601','2025-09-30','2026-04-16'),"
-        "('qj5n-h5qp','year_month_reported',1738000000,now(),100,'h',1,'202601',NULL,NULL)"
+        "('qj5n-h5qp','year_month_reported',1738000000,now(),100,'h',1,'202601',NULL,NULL),"
+        "('gyhf-rsr3','reporting_period',1738000000,now(),100,'h',1,'202601',NULL,NULL)"
     )
     info = lookup.dataset_info_from(c)
     fb = next(d for d in info["datasets"] if d["dataset_id"] == "fb86-vt7u")
     qj = next(d for d in info["datasets"] if d["dataset_id"] == "qj5n-h5qp")
+    gy = next(d for d in info["datasets"] if d["dataset_id"] == "gyhf-rsr3")
     assert fb["available_periods"] == ["202601"]
-    assert qj["available_periods"] == ["202509", "202601"]   # snapshots only
+    # snapshots only: the 201903 adoption record is excluded by construction
+    assert qj["available_periods"] == ["202509", "202601"]
     assert "adoption" in qj["period_note"].lower()           # original-budget caveat
+    assert gy["available_periods"] == ["202601"]             # from project_budget_fy
