@@ -1,6 +1,8 @@
 # src/od_cpd/socrata.py
 from __future__ import annotations
 
+import csv
+import io
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -59,14 +61,20 @@ def download_csv(
                 params = {"$limit": page_size, "$offset": offset, "$order": ":id"}
                 resp = client.get(base, params=params)
                 resp.raise_for_status()
-                lines = resp.text.splitlines(keepends=True)
+                text = resp.text
+                lines = text.splitlines(keepends=True)
                 if not lines:
                     break
                 header, body = lines[0], lines[1:]
                 if offset == 0:
                     fh.write(header)
                 fh.writelines(body)
-                n = len(body)
+                # Count CSV *records*, not physical lines: a quoted field may
+                # contain embedded newlines, so one record can span several
+                # physical lines. Each page is a complete CSV document with its
+                # own header, and a record never spans a page boundary, so
+                # parsing the page in memory (<= page_size rows) is safe.
+                n = max(sum(1 for _ in csv.reader(io.StringIO(text))) - 1, 0)
                 total += n
                 offset += page_size
                 if n < page_size:
