@@ -147,7 +147,12 @@ def run_ingest() -> dict:
     except Exception:
         con.close()
         shadow.unlink(missing_ok=True)  # don't leave a half-built shadow DB behind
+        # Keep the downloaded CSVs in var/tmp on failure — they're diagnostics.
         raise
     con.close()
     atomic_swap(shadow, db_path())
+    # Success: the CSVs have been loaded and swapped in, so drop them — nothing
+    # deletes var/tmp otherwise and they'd accumulate one full copy per ingest.
+    for _meta, csv in downloads.values():
+        csv.unlink(missing_ok=True)
     return summary

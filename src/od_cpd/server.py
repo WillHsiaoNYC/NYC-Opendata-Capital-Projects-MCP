@@ -65,24 +65,24 @@ def run_sql(query: str, output: str = "inline") -> dict:
         return {"error": str(e)}
 
 
+def _with_conn(fn, *args, **kwargs):
+    try:
+        with ro_conn() as con:
+            return fn(con, *args, **kwargs)
+    except DBMissingError as e:
+        return {"error": str(e)}
+
+
 @mcp.tool()
 def dataset_info() -> dict:
     """Per-dataset freshness, current period, row counts, and the key caveats."""
-    try:
-        with ro_conn() as con:
-            return lookup.dataset_info_from(con)
-    except DBMissingError as e:
-        return {"error": str(e)}
+    return _with_conn(lookup.dataset_info_from)
 
 
 @mcp.tool()
 def list_agencies(contains: str | None = None) -> dict:
     """Agency dictionary with live CPD presence + schedule-executor flag."""
-    try:
-        with ro_conn() as con:
-            return lookup.list_agencies_from(con, contains=contains)
-    except DBMissingError as e:
-        return {"error": str(e)}
+    return _with_conn(lookup.list_agencies_from, contains=contains)
 
 
 @mcp.tool()
@@ -91,11 +91,7 @@ def list_categories() -> dict:
     with budget-line counts and total budget. Use a category name as the `category`
     filter on rank_projects. Categories are derived from ten_year_plan_category +
     sponsor_agency + fms-id prefix — NOT managing_agency or project name."""
-    try:
-        with ro_conn() as con:
-            return lookup.list_categories_from(con)
-    except DBMissingError as e:
-        return {"error": str(e)}
+    return _with_conn(lookup.list_categories_from)
 
 
 @mcp.tool()
@@ -104,19 +100,7 @@ def describe_field(field: str | None = None, dataset: str | None = None) -> dict
     allowed values, primary/foreign key, limitations, notes. Filter by `field` (column
     name or display name) and/or `dataset` (RAW table name or socrata_id); omit both
     for the full dictionary."""
-    try:
-        with ro_conn() as con:
-            return lookup.describe_field_from(con, field, dataset)
-    except DBMissingError as e:
-        return {"error": str(e)}
-
-
-def _with_conn(fn, *args, **kwargs):
-    try:
-        with ro_conn() as con:
-            return fn(con, *args, **kwargs)
-    except DBMissingError as e:
-        return {"error": str(e)}
+    return _with_conn(lookup.describe_field_from, field, dataset)
 
 
 @mcp.tool()

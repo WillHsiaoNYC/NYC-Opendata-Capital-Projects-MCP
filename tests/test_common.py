@@ -2,7 +2,8 @@
 import duckdb
 
 from od_cpd import materialize
-from od_cpd.tools._common import current_period, direction_of, signed_metric, mm_envelope
+from od_cpd.tools._common import (current_period, direction_of, signed_metric,
+                                  mm_envelope, interpolate_sql)
 from od_cpd.tools.schedule import schedule_breakdown_from
 from tests.test_materialize_normalized import _raw
 
@@ -55,6 +56,14 @@ def test_mm_envelope_count_one_light_caveat():
     assert env["anchor"] == {"type": "schedule", "id": "101"}
     assert env["linked_budgets"] == [{"fms_id": "ABC", "managing_agency": "DDC"}]
     assert "1:1" in env["caveat"]
+
+
+def test_interpolate_sql_escapes_single_quotes():
+    # A pid/value containing a single quote must be escaped, not injected raw.
+    sql = interpolate_sql("SELECT * FROM latest_project_state WHERE pid = ?", ["O'Brien"])
+    assert sql == "SELECT * FROM latest_project_state WHERE pid = 'O''Brien'"
+    # Placeholder/param count mismatch returns the sql unchanged (no partial fill).
+    assert interpolate_sql("WHERE a = ? AND b = ?", ["x"]) == "WHERE a = ? AND b = ?"
 
 
 def test_mm_envelope_fanout_lists_all():
