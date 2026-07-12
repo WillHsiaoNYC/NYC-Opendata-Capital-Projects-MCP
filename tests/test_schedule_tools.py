@@ -164,3 +164,14 @@ def test_delay_reason_stats_coverage_counts():
     assert cov["delayed_total"] == 2
     assert cov["with_reason"] == 0
     assert cov["without_reason"] == 2
+
+
+def test_schedule_changes_rows_carry_agency_project_name():
+    con = duckdb.connect(":memory:"); _raw(con)
+    con.execute(
+        "INSERT INTO raw_project_detail (reporting_period, managing_agency, sponsor_agency,"
+        " pid, fms_id, total_budget, current_phase, borough, agency_project_name) "
+        "VALUES ('202509','DDC','DDC','101','A','90','Design','K','Park A')")
+    materialize.materialize_all(con)
+    r = schedule_changes_from(con, "delayed", from_period="202509", to_period="202601")
+    assert all("agency_project_name" in row for row in r["changes"])

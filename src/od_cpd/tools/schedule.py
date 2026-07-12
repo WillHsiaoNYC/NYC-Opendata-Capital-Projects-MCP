@@ -170,14 +170,14 @@ def schedule_changes_from(con, change_type, from_period=None, to_period=None, ag
         ag = f" AND {ascope['where']}"
     if change_type == "completed":
         excl = "" if include_cancelled else " AND t.lifecycle_status = 'completed'"
-        sql = (f"SELECT t.pid, t.managing_agency, t.lifecycle_status FROM schedule_history t "
+        sql = (f"SELECT t.pid, t.managing_agency, t.agency_project_name, t.lifecycle_status FROM schedule_history t "
                f"LEFT JOIN schedule_history f ON t.pid=f.pid AND f.reporting_period=? "
                f"WHERE t.reporting_period=? "
                f"AND (f.pid IS NULL OR f.lifecycle_status NOT IN ('completed','cancelled')) "
                f"AND t.lifecycle_status IN ('completed','cancelled'){excl}{ag}")
         params = [from_period, to_period]
     elif change_type == "delayed":
-        sql = (f"SELECT t.pid, t.managing_agency, t.variance_day FROM schedule_history t "
+        sql = (f"SELECT t.pid, t.managing_agency, t.agency_project_name, t.variance_day FROM schedule_history t "
                f"LEFT JOIN schedule_history f ON t.pid=f.pid AND f.reporting_period=? "
                f"WHERE t.reporting_period=? AND t.variance_day>0 "
                f"AND (f.pid IS NULL OR f.variance_day IS NULL OR f.variance_day<=0){ag}")

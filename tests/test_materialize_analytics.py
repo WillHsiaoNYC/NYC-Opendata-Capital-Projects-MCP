@@ -92,3 +92,18 @@ def test_lifetime_variance_prefers_adopted_original():
                        "WHERE fms_id='F'").fetchone()[0] is True
     assert con.execute("SELECT over_budget FROM lifetime_budget_variance "
                        "WHERE fms_id='C'").fetchone()[0] is False
+
+
+def test_fms_location_carries_latest_nonnull_name():
+    con = duckdb.connect(":memory:"); _raw(con)
+    # older period HAS a name; latest period's name is NULL — latest non-null wins
+    con.executemany(
+        "INSERT INTO raw_project_detail (reporting_period, managing_agency, sponsor_agency,"
+        " pid, fms_id, total_budget, current_phase, borough, fms_project_name) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        [["202509","DPR","DPR","801","NM1","10","Design","Q","Old Name"],
+         ["202601","DPR","DPR","801","NM1","10","Design","Q",None]])
+    materialize.materialize_all(con)
+    name = con.execute("SELECT fms_project_name FROM fms_location "
+                       "WHERE fms_id='NM1' AND managing_agency='DPR'").fetchone()[0]
+    assert name == "Old Name"

@@ -32,7 +32,7 @@ def run_sql(query: str, output: str = "inline") -> dict:
     budgets), lifetime_budget_variance (per-line lifetime, original_budget_source),
     schedule_budget_link (PID<->FMS edges), pid_funding (per-PID link rollup),
     cumulative_schedule_variance (per-PID lifetime days), fms_sponsor (fms_id -> owner),
-    fms_location (line-level borough/community board), agency_rollup_by_period,
+    fms_location (line-level borough/community board/name), agency_rollup_by_period,
     category_dim, agency_dim, project_budget_fy, meta.
     GRAIN RULES: budget comparisons key on (managing_agency, fms_id) — never fms_id
     alone; sponsor-scoped budget sums use the semi-join

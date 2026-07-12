@@ -219,13 +219,27 @@ def build_analytics(con: duckdb.DuckDBPyConnection) -> None:
     # violations in all periods); take the line's latest in-cadence row
     # so the pair stays internally consistent. This is the budget side's native
     # location — borough-scoped budget questions need no PID crossing.
+    # fms_project_name: the line's latest NON-NULL name (367 lines rename across history).
     con.execute(f"""
         CREATE OR REPLACE TABLE fms_location AS
-        SELECT fms_id, managing_agency, borough, community_board
-        FROM raw_project_detail
-        WHERE fms_id IS NOT NULL AND {_cadence_filter('reporting_period')}
-        QUALIFY row_number() OVER (PARTITION BY fms_id, managing_agency
-                                   ORDER BY reporting_period DESC) = 1
+        WITH latest AS (
+            SELECT fms_id, managing_agency, borough, community_board
+            FROM raw_project_detail
+            WHERE fms_id IS NOT NULL AND {_cadence_filter('reporting_period')}
+            QUALIFY row_number() OVER (PARTITION BY fms_id, managing_agency
+                                       ORDER BY reporting_period DESC) = 1
+        ),
+        nm AS (
+            SELECT fms_id, managing_agency,
+                   arg_max(fms_project_name, reporting_period)
+                       FILTER (WHERE fms_project_name IS NOT NULL) AS fms_project_name
+            FROM raw_project_detail
+            WHERE fms_id IS NOT NULL AND {_cadence_filter('reporting_period')}
+            GROUP BY fms_id, managing_agency
+        )
+        SELECT l.fms_id, l.managing_agency, l.borough, l.community_board,
+               nm.fms_project_name
+        FROM latest l LEFT JOIN nm USING (fms_id, managing_agency)
     """)
 
     # cumulative_schedule_variance — per pid; guard NULL + absurd outliers.
