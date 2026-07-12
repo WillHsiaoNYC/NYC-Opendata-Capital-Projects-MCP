@@ -63,3 +63,42 @@ def test_domain_rules_state_period_basis(con):
     joined = " ".join(rules)
     assert "Reporting-period basis" in joined
     assert "all-history" in joined.lower()
+
+
+import duckdb as _duckdb
+from od_cpd import materialize as _materialize
+from tests.test_materialize_normalized import _raw as _raw_fixture
+
+
+def _built_con():
+    c = _duckdb.connect(":memory:"); _raw_fixture(c); _materialize.materialize_all(c)
+    return c
+
+
+def test_describe_table_catalog_mode():
+    out = lookup.describe_table_from(_built_con())
+    names = {t["table"] for t in out["tables"]}
+    assert {"schedule_history", "lifetime_budget_variance", "raw_project_detail"} <= names
+    sh = next(t for t in out["tables"] if t["table"] == "schedule_history")
+    assert sh["grain"] == "one row per (pid, reporting_period)"
+    assert sh["kind"] == "analytics"
+
+
+def test_describe_table_detail_mode_case_insensitive():
+    out = lookup.describe_table_from(_built_con(), table="Schedule_History")
+    assert out["table"] == "schedule_history"
+    cols = {c["name"]: c for c in out["columns"]}
+    assert cols["variance_day"]["type"] == "BIGINT"
+    assert "signed" in cols["variance_day"]["note"]
+    assert "pid" in cols
+
+
+def test_describe_table_raw_points_to_describe_field():
+    out = lookup.describe_table_from(_built_con(), table="raw_budget_history")
+    assert "describe_field" in out["field_semantics"]
+    assert all(c["type"] == "VARCHAR" for c in out["columns"])
+
+
+def test_describe_table_unknown_errors_with_valid_names():
+    out = lookup.describe_table_from(_built_con(), table="nope")
+    assert "error" in out and "schedule_history" in out["error"]

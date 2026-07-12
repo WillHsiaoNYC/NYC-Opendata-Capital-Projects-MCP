@@ -7,6 +7,7 @@ from ..agencies import SCHEDULE_EXECUTORS
 from ..dbio import rows_as_dicts
 from ..primer import DOMAIN_RULES
 from ..provenance import source_descriptor
+from ..table_catalog import load_table_catalog
 from ._common import ILIKE_ESC, LIKE_ESC, escape_like
 
 
@@ -120,3 +121,36 @@ def list_agencies_from(con: duckdb.DuckDBPyConnection, contains: str | None = No
         "agencies": agencies,
         "provenance": source_descriptor("agency_dim (agencies.yaml + live intersection)"),
     }
+
+
+def describe_table_from(con: duckdb.DuckDBPyConnection, table: str | None = None) -> dict:
+    """Schema catalog: curated grain/keying notes (tables.yaml) + live columns/types
+    (information_schema). No arg → one-line catalog; table= → full detail."""
+    catalog = load_table_catalog()
+    prov = source_descriptor("tables.yaml (curated) + information_schema (live)")
+    if table is None:
+        return {"tables": [{"table": n, "kind": e["kind"], "grain": e["grain"],
+                            "description": e["description"]}
+                           for n, e in catalog.items()],
+                "note": "Pass table=<name> for columns/types + keying notes.",
+                "provenance": prov}
+    key = next((k for k in catalog if k.lower() == table.lower()), None)
+    if key is None:
+        return {"error": f"Unknown table '{table}'. Valid tables: "
+                         f"{', '.join(sorted(catalog))}"}
+    entry = catalog[key]
+    cols = rows_as_dicts(con,
+        "SELECT column_name AS name, data_type AS type FROM information_schema.columns "
+        "WHERE table_name = ? ORDER BY ordinal_position", [key])
+    for c in cols:
+        note = (entry.get("column_notes") or {}).get(c["name"])
+        if note:
+            c["note"] = note
+    out = {"table": key, "kind": entry["kind"], "grain": entry["grain"],
+           "description": entry["description"], "columns": cols, "provenance": prov}
+    if entry.get("keying_notes"):
+        out["keying_notes"] = entry["keying_notes"]
+    if entry["kind"] == "raw":
+        out["field_semantics"] = (f"Official field definitions: "
+                                  f"describe_field(dataset='{key}')")
+    return out
