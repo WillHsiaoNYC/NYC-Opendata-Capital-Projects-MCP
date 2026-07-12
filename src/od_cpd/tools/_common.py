@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ..dbio import sql_literal
+from ..periods import resolve_current_period
 
 
 def interpolate_sql(sql: str, params: list) -> str:
@@ -59,9 +60,19 @@ CATEGORY_GROUP_NOTE = (
     "total. PIDs with no linked budget line at the period are absent.")
 
 
-def current_period(con, table: str = "schedule_history") -> str:
-    """Latest reporting period present in a NORMALIZED table (already off-cadence-filtered)."""
-    return con.execute(f"SELECT max(reporting_period) FROM {table}").fetchone()[0]
+def current_period(con, table: str = "schedule_history") -> str | None:
+    """Latest FULL reporting period present in a NORMALIZED table.
+
+    A bare max(reporting_period) would let a partially published latest period
+    (an ingest catching Socrata mid-publish) silently become 'current' for every
+    breakdown/stats tool while meta.latest_reporting_period — stamped through the
+    same resolve_current_period guard (ingest.write_meta) — still reports the
+    prior period. Sharing the guard keeps the two answers consistent.
+    """
+    counts = dict(con.execute(
+        f"SELECT reporting_period, count(*) FROM {table} GROUP BY reporting_period"
+    ).fetchall())
+    return resolve_current_period(counts)
 
 
 def direction_of(value, kind: str = "schedule"):
