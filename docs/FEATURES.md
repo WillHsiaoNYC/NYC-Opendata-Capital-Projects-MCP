@@ -13,7 +13,7 @@ with domain rules baked in so callers don't have to rediscover them.
 ## 1. Tools (the callable surface)
 
 **Discovery / metadata**
-- `dataset_info` — per-dataset freshness, current period, row counts, key caveats, per-dataset field definitions, and `domain_rules` (the full primer, embedded so clients that drop MCP server instructions still get the rules on the first orienting call)
+- `dataset_info` — per-dataset freshness, current period, available reporting periods (typed-table basis; qj5n adoption-month original-budget records excluded by construction), row counts, key caveats, per-dataset field definitions, and `domain_rules` (the full primer, embedded so clients that drop MCP server instructions still get the rules on the first orienting call)
 - `list_agencies` — agency dictionary (from `agencies.yaml`) + live CPD presence + schedule-executor flag
 - `list_categories` — program/facility categories with budget-line counts & totals
 - `describe_field` — official field definitions (description, allowed values, primary/foreign key, limitations, notes), filterable by field and/or dataset (both filters are case-insensitive SUBSTRING matches)
