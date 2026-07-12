@@ -50,3 +50,29 @@ def test_portfolio_lifecycle_validation_and_notes():
     assert r["summary"]["n_projects"] == 3
     notes = " ".join(r["notes"])
     assert "attributed_budget" in notes and "EACH" in notes  # bases + count-in-each
+
+
+def _cb_stale_link_db():
+    """PID 601 is funded by line CBX (community board 'X') in an OLD period only —
+    that line is DROPPED by the latest period, where 601 is funded by line CBY
+    (community board 'Y'). schedule_budget_link is all-history, so the CB filter
+    must match 601's CURRENT (latest link-period) lines, not the stale 'X' tie."""
+    con = _category_db()
+    con.executemany(
+        "INSERT INTO raw_project_detail (reporting_period, managing_agency, sponsor_agency,"
+        " pid, fms_id, total_budget, current_phase, borough, community_board)"
+        " VALUES (?,?,?,?,?,?,?,?,?)",
+        [["202509", "DPR", "DPR", "601", "CBX", "10", "Construction", "Q", "X"],
+         ["202601", "DPR", "DPR", "601", "CBY", "10", "Construction", "Q", "Y"]])
+    materialize.materialize_all(con)
+    return con
+
+
+def test_portfolio_community_board_filter_uses_current_links_only():
+    con = _cb_stale_link_db()
+    # 'X' is a DROPPED (old-period) funding line for 601 -> must NOT resurface it.
+    rx = project_portfolio_from(con, community_board="X")
+    assert {row["pid"] for row in rx["rows"]} == set()
+    # 'Y' is 601's CURRENT (latest link-period) funding line -> must match.
+    ry = project_portfolio_from(con, community_board="Y")
+    assert {row["pid"] for row in ry["rows"]} == {"601"}
