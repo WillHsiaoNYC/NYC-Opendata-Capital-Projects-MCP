@@ -32,7 +32,8 @@ def get_project_schedule_from(con: duckdb.DuckDBPyConnection, pid: str) -> dict:
     return {"answer": answer, **env,
             "provenance": provenance_block(
                 definition="latest_project_state row for PID", scope={"pid": pid},
-                row_count=1, reproduce_sql=f"SELECT * FROM latest_project_state WHERE pid='{pid}'")}
+                row_count=1, reproduce_sql=interpolate_sql(
+                    "SELECT * FROM latest_project_state WHERE pid = ?", [pid]))}
 
 
 def get_project_budget_from(con: duckdb.DuckDBPyConnection, fms_id: str,

@@ -64,5 +64,5 @@ def app_token() -> str | None:
 
 
 def data_dir() -> Path:
-    """Tracked source dictionaries (agencies.yaml, fms_agency_dim.tsv)."""
+    """Tracked source dictionaries (agencies.yaml, categories.yaml, data_dictionary.yaml)."""
     return Path(__file__).resolve().parents[2] / "data"

@@ -16,6 +16,15 @@ def test_get_schedule_lists_linked_budgets_fanout():
     assert r["answer"]["sponsor_agency"] == "DDC"   # owner exposed alongside managing agency
 
 
+def test_get_schedule_provenance_sql_matches_interpolated_form():
+    # reproduce_sql now routes through interpolate_sql (quote-safe), matching the
+    # parameterized query actually executed — not a raw f-string.
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    r = get_project_schedule_from(con, "101")
+    assert r["provenance"]["reproduce_sql"] == \
+        "SELECT * FROM latest_project_state WHERE pid = '101'"
+
+
 def test_get_schedule_exposes_sponsor_when_managed_by_other():
     con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
     r = get_project_schedule_from(con, "102")   # DDC-managed, DPR-sponsored
