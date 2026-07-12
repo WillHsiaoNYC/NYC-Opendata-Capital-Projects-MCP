@@ -26,6 +26,7 @@ def get_project_schedule_from(con: duckdb.DuckDBPyConnection, pid: str) -> dict:
         "period_variance_days": signed_metric(s["period_variance_days"]),
         "reason_for_delay": s["reason_for_delay"],
         "forecast_completion": str(s["forecast_completion"]) if s["forecast_completion"] else None,
+        "forecast_past_due": s["forecast_past_due"],
         "attributed_budget": s["attributed_budget"],
     }
     env = mm_envelope(anchor_type="schedule", anchor_id=pid, linked=linked)
@@ -93,6 +94,9 @@ def _schedule_history_answer(con: duckdb.DuckDBPyConnection, pid: str) -> dict:
                      "current_phase": last["current_phase"],
                      "lifecycle_status": last["lifecycle_status"],
                      "cumulative_variance_days": signed_metric(cum[0] if cum else None)}
+    lps = con.execute("SELECT forecast_past_due FROM latest_project_state WHERE pid = ?",
+                      [pid]).fetchone()
+    current_state["forecast_past_due"] = bool(lps[0]) if lps else None
     linked = rows_as_dicts(con,
         "SELECT DISTINCT fms_id, managing_agency FROM schedule_budget_link "
         "WHERE pid = ? QUALIFY reporting_period = max(reporting_period) OVER ()", [pid])

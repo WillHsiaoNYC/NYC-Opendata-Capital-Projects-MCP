@@ -51,6 +51,7 @@ def rank_projects_from(con, entity, rank_by, n=10, direction="top",
         if scope is not None:
             where.append(scope["where"])
         sql = (f"SELECT s.pid, s.agency_project_name, s.managing_agency, s.attributed_budget, "
+               f"s.forecast_past_due, "
                f"{metric_expr} AS metric FROM {src} WHERE " + " AND ".join(where) +
                f" ORDER BY metric {order} LIMIT {int(n)}")
         rows = rows_as_dicts(con, sql, params)

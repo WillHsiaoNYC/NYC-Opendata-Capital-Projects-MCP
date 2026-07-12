@@ -67,7 +67,7 @@ def project_portfolio_from(con, category=None, borough=None, community_board=Non
         f"SELECT s.pid, s.agency_project_name, s.managing_agency, s.sponsor_agency, "
         f"s.borough, s.boroughs, s.lifecycle_status, s.current_phase, "
         f"s.completion_date, s.completion_date_type, s.period_variance_days, "
-        f"s.attributed_budget "
+        f"s.forecast_past_due, s.attributed_budget "
         f"FROM latest_project_state s "
         f"WHERE {cond} "
         f"ORDER BY s.completion_date IS NULL, s.completion_date, s.pid LIMIT {n}")

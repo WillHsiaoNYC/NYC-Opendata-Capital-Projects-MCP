@@ -206,6 +206,19 @@ def build_analytics(con: duckdb.DuckDBPyConnection) -> None:
                s.managing_agency, s.sponsor_agency, s.self_managed, s.borough, s.boroughs,
                s.completion_date, s.completion_date_type, s.forecast_completion,
                s.actual_construction_end,
+               -- forecast_past_due: the forecast was already past when the agency
+               -- last reported (the PID's OWN latest period, not the global latest —
+               -- 543 PIDs left the reporting universe earlier). Completed/cancelled
+               -- by ANY signal (derived status, or an Actual completion date whose
+               -- phase label hasn't flipped) is NEVER past due. In-month = due now.
+               COALESCE(
+                 s.lifecycle_status = 'in_progress'
+                 AND s.completion_date_type IS DISTINCT FROM 'Actual'
+                 AND s.forecast_completion IS NOT NULL
+                 AND s.forecast_completion <
+                     make_date(CAST(substr(s.reporting_period, 1, 4) AS INT),
+                               CAST(substr(s.reporting_period, 5, 2) AS INT), 1),
+                 FALSE) AS forecast_past_due,
                s.variance_day AS period_variance_days, s.direction, s.reason_for_delay,
                COALESCE(f.n_linked_budgets, 0) AS n_linked_budgets,
                COALESCE(f.attributed_budget, 0.0) AS attributed_budget,
