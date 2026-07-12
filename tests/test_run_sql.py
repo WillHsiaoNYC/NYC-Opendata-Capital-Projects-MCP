@@ -98,3 +98,13 @@ def test_describe_rejection_steers_to_describe_table():
     from od_cpd.tools.sql import validate_select
     with pytest.raises(ValueError, match="describe_table"):
         validate_select("DESCRIBE schedule_history")
+
+
+def test_truncated_inline_result_carries_csv_hint():
+    con = duckdb.connect(":memory:")
+    con.execute("CREATE TABLE meta (latest_reporting_period VARCHAR)")
+    r = run_sql_on(con, "SELECT * FROM range(10)", row_cap=3)
+    assert r["truncated"] is True
+    assert "output='csv'" in r["truncation_note"]
+    r2 = run_sql_on(con, "SELECT 1", row_cap=3)
+    assert "truncation_note" not in r2

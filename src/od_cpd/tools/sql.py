@@ -95,6 +95,9 @@ def run_sql_on(con: duckdb.DuckDBPyConnection, query: str, *,
             reproduce_sql=q,
         ),
     }
+    if truncated:
+        result["truncation_note"] = (f"Inline result truncated to {row_cap} rows — "
+                                     "use output='csv' for the full result.")
     note = _period_basis_note(q, latest)
     if note:
         result["period_basis_note"] = note

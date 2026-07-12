@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from .dbio import ro_conn, DBMissingError
 from .export import write_csv, write_xlsx
@@ -20,8 +21,15 @@ from .tools.portfolio import project_portfolio_from
 
 mcp = FastMCP("od-cpd", instructions=PRIMER)
 
+# All tools are read-only queries over a read-only connection. run_sql is the one
+# exception: its csv/xlsx modes write a fresh file under exports/ per call —
+# additive (never destructive), but neither read-only nor idempotent.
+_READONLY = ToolAnnotations(readOnlyHint=True, idempotentHint=True)
+_RUN_SQL_NOTES = ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                 idempotentHint=False)
 
-@mcp.tool()
+
+@mcp.tool(annotations=_RUN_SQL_NOTES)
 def run_sql(query: str, output: str = "inline") -> dict:
     """Run a read-only SELECT against the local CPD DuckDB.
 
@@ -74,19 +82,19 @@ def _with_conn(fn, *args, **kwargs):
         return {"error": str(e)}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def dataset_info() -> dict:
     """Per-dataset freshness, current period, row counts, and the key caveats."""
     return _with_conn(lookup.dataset_info_from)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def list_agencies(contains: str | None = None) -> dict:
     """Agency dictionary with live CPD presence + schedule-executor flag."""
     return _with_conn(lookup.list_agencies_from, contains=contains)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def list_categories() -> dict:
     """Program/facility categories (Library, Parks & Recreation, Sewer & Water, …)
     with budget-line counts and total budget. Use a category name as the `category`
@@ -95,7 +103,7 @@ def list_categories() -> dict:
     return _with_conn(lookup.list_categories_from)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def describe_field(field: str | None = None, dataset: str | None = None) -> dict:
     """Official field definitions (the NYC Open Data data dictionary): description,
     allowed values, primary/foreign key, limitations, notes. Filter by `field` (column
@@ -104,7 +112,7 @@ def describe_field(field: str | None = None, dataset: str | None = None) -> dict
     return _with_conn(lookup.describe_field_from, field, dataset)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def describe_table(table: str | None = None) -> dict:
     """Schema catalog for every queryable DuckDB table (typed analytics tables, dims,
     raw mirrors): live columns + types plus curated grain and keying notes. No arg →
@@ -114,14 +122,14 @@ def describe_table(table: str | None = None) -> dict:
     return _with_conn(lookup.describe_table_from, table)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def resolve_project_reference(query: str) -> dict:
     """Resolve any project identifier (PID, FMS ID, name, partial) → schedule+budget
     matches bucketed by entity. Call this first for any named-project question."""
     return _with_conn(resolve_from, query)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def get_project_schedule(pid: str) -> dict:
     """Schedule (PID): phase, lifecycle, signed variance, reason; lists linked budgets;
     `forecast_past_due` flags a forecast already past as of the PID's own latest report
@@ -129,14 +137,14 @@ def get_project_schedule(pid: str) -> dict:
     return _with_conn(get_project_schedule_from, pid)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def get_project_budget(fms_id: str, managing_agency: str | None = None) -> dict:
     """Budget (FMS line): total, spend, variance; lists linked schedules. NB budget has
     no 'completed' state; spend%=100 ≠ done."""
     return _with_conn(get_project_budget_from, fms_id, managing_agency)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def get_project_history(pid: str | None = None, fms_id: str | None = None,
                         managing_agency: str | None = None) -> dict:
     """Period-by-period history for ONE project. Schedule lens (pid=…): each period's
@@ -149,7 +157,7 @@ def get_project_history(pid: str | None = None, fms_id: str | None = None,
     return _with_conn(get_project_history_from, pid, fms_id, managing_agency)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def schedule_breakdown(group_by: str, metric: str = "count", statistic: str = "count",
                        period: str = "current", agency: str | None = None,
                        agency_role: str = "auto") -> dict:
@@ -162,7 +170,7 @@ def schedule_breakdown(group_by: str, metric: str = "count", statistic: str = "c
                       agency, agency_role)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def schedule_changes(change_type: str, from_period: str, to_period: str,
                      agency: str | None = None, include_cancelled: bool = False,
                      agency_role: str = "auto") -> dict:
@@ -172,7 +180,7 @@ def schedule_changes(change_type: str, from_period: str, to_period: str,
                       agency, include_cancelled, agency_role)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def delay_reason_stats(period: str = "current", agency: str | None = None,
                        scope: str = "current", agency_role: str = "auto") -> dict:
     """Distribution of reason-for-delay (only populated when variance>0). Defaults to current
@@ -181,7 +189,7 @@ def delay_reason_stats(period: str = "current", agency: str | None = None,
     return _with_conn(delay_reason_stats_from, period, agency, scope, agency_role)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def budget_breakdown(group_by: str = "managing_agency", metric: str = "total_budget",
                      period: str = "current", agency: str | None = None,
                      agency_role: str = "auto") -> dict:
@@ -192,7 +200,7 @@ def budget_breakdown(group_by: str = "managing_agency", metric: str = "total_bud
     return _with_conn(budget_breakdown_from, group_by, metric, period, agency, agency_role)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def budget_change(target: str, from_period: str, to_period: str,
                   metric: str = "total_budget", agency_role: str = "auto",
                   managing_agency: str | None = None) -> dict:
@@ -205,7 +213,7 @@ def budget_change(target: str, from_period: str, to_period: str,
                       agency_role, managing_agency)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def rank_projects(entity: str, rank_by: str, n: int = 10, direction: str = "top",
                   min_total_budget: float | None = None, max_total_budget: float | None = None,
                   delayed_only: bool = False, category: str | None = None,
@@ -224,7 +232,7 @@ def rank_projects(entity: str, rank_by: str, n: int = 10, direction: str = "top"
                       agency, agency_role)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def project_duration_stats(from_milestone: str = "actual_design_start",
                            to_milestone: str = "actual_construction_end",
                            group_by: str | None = None) -> dict:
@@ -234,7 +242,7 @@ def project_duration_stats(from_milestone: str = "actual_design_start",
     return _with_conn(project_duration_stats_from, from_milestone, to_milestone, group_by)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def project_portfolio(category: str | None = None, borough: str | None = None,
                       community_board: str | None = None,
                       lifecycle_status: str | None = None,

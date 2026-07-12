@@ -1,8 +1,10 @@
 # tests/test_server.py
+import anyio
 import duckdb
 
 from od_cpd import materialize, server
 from od_cpd.primer import PRIMER
+from od_cpd.server import mcp
 from tests.test_materialize_normalized import _raw
 
 
@@ -36,3 +38,19 @@ def test_run_sql_docstring_covers_all_materialized_tables():
     doc = server.run_sql.__doc__ or ""
     missing = sorted(t for t in tables - internal if t not in doc)
     assert not missing, f"tables absent from run_sql docstring: {missing}"
+
+
+def test_every_tool_is_annotated():
+    tools = anyio.run(mcp.list_tools)
+    assert len(tools) >= 17
+    for t in tools:
+        assert t.annotations is not None, t.name
+        if t.name == "run_sql":
+            # export modes write files under exports/: not read-only, not idempotent,
+            # but additive — never destructive.
+            assert t.annotations.readOnlyHint is False
+            assert t.annotations.destructiveHint is False
+            assert t.annotations.idempotentHint is False
+        else:
+            assert t.annotations.readOnlyHint is True, t.name
+            assert t.annotations.idempotentHint is True, t.name
