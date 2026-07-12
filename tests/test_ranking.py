@@ -70,3 +70,18 @@ def test_rank_budget_rows_carry_fms_project_name():
     r = rank_projects_from(con, entity="budget", rank_by="total_budget")
     row_a = next(x for x in r["rows"] if x["fms_id"] == "A")
     assert row_a["fms_project_name"] == "FMS Park A"
+
+
+def test_rank_budget_row_without_fb86_line_gets_null_name():
+    con = duckdb.connect(":memory:"); _raw(con)
+    # a budget line present ONLY in raw_budget_history (no fb86/raw_project_detail row,
+    # so no fms_location entry) → the LEFT JOIN yields a NULL fms_project_name
+    con.execute(
+        "INSERT INTO raw_budget_history (managing_agency, fms_id, year_month_reported,"
+        " total_budget, spend_to_date, budget_variance) "
+        "VALUES ('QPL','QONLY','202601','5000','0','0')")
+    materialize.materialize_all(con)
+    r = rank_projects_from(con, entity="budget", rank_by="total_budget", n=50)
+    row = next(x for x in r["rows"] if x["fms_id"] == "QONLY")
+    assert row["managing_agency"] == "QPL"
+    assert row["fms_project_name"] is None

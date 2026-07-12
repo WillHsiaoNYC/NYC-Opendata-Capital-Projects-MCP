@@ -103,17 +103,21 @@ latest_project_state:
   keying_notes: >-
     'Latest' is the PID's OWN latest reporting_period, which for PIDs that left
     the reporting universe predates the global latest period.
+  column_notes:
+    forecast_past_due: "TRUE only when in_progress with no Actual completion date and forecast_completion earlier than the first day of the PID's OWN latest reporting month (in-month = due now; completed/cancelled never flag)"
 
 fms_location:
   kind: analytics
   grain: one row per (fms_id, managing_agency) — ALL-HISTORY, no reporting_period
   description: >-
-    Line-level location dimension (borough, community_board) from the line's
-    latest in-cadence raw row. The budget side's native location — borough-scoped
-    budget questions need no PID crossing.
+    Line-level location dimension (borough, community_board) plus the line-keyed
+    fms_project_name, from the line's latest in-cadence raw row. The budget side's
+    native location — borough-scoped budget questions need no PID crossing.
   keying_notes: >-
     All-history dim: JOIN to enrich; do NOT count rows as a single period's
     inventory.
+  column_notes:
+    fms_project_name: "the line's latest NON-NULL FMS-system name (lines can rename across history)"
 
 cumulative_schedule_variance:
   kind: analytics
