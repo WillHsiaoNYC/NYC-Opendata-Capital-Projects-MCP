@@ -87,8 +87,8 @@ def build_agency_dim(con: duckdb.DuckDBPyConnection) -> None:
     )
     # Mark live presence + counts from the edge table in one set-based pass each.
     con.execute(
-        "UPDATE agency_dim SET cpd_active = (cpdw_acronym IN "
-        "(SELECT DISTINCT managing_agency FROM raw_project_detail))"
+        "UPDATE agency_dim SET cpd_active = coalesce(cpdw_acronym IN "
+        "(SELECT DISTINCT managing_agency FROM raw_project_detail), FALSE)"
     )
     con.execute(
         "UPDATE agency_dim AS a SET row_count_live = t.cnt FROM ("
