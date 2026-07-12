@@ -1,0 +1,167 @@
+# Curated catalog of every user-queryable table in the CPD DuckDB.
+# Static — edit THIS file, not Python (same pattern as data_dictionary.yaml).
+# kind: analytics (built by materialize.py) | dimension (curated YAML → table)
+#       | raw (Socrata mirror, all VARCHAR).
+# tests/test_table_catalog.py asserts this catalog matches a freshly built DB
+# exactly (internal tables meta/column_dict excluded).
+
+raw_project_detail:
+  kind: raw
+  grain: one row per (reporting_period, pid, fms_id, managing_agency) funding-link record
+  description: >-
+    Raw mirror of fb86-vt7u (Budget and Schedule — the PID⨝FMS join dataset). All
+    VARCHAR — cast as needed. Field semantics: describe_field(dataset='raw_project_detail').
+  keying_notes: >-
+    One PID or one FMS id appears on MANY rows — dedup to the grain you want
+    (distinct pid, or distinct (fms_id, managing_agency)) before counting.
+
+raw_schedule_history:
+  kind: raw
+  grain: one row per (reporting_period, pid) schedule snapshot
+  description: >-
+    Raw mirror of 95tx-snak (schedule variance per period). All VARCHAR. Field
+    semantics: describe_field(dataset='raw_schedule_history').
+
+raw_budget_history:
+  kind: raw
+  grain: one row per (year_month_reported, fms_id, managing_agency)
+  description: >-
+    Raw mirror of qj5n-h5qp (budget/spend snapshots). All VARCHAR. Rows with NULL
+    spend_to_date are ORIGINAL-BUDGET adoption records stamped with any calendar
+    month — not reporting snapshots (typed home: original_budget). Field semantics:
+    describe_field(dataset='raw_budget_history').
+
+raw_budget_fy:
+  kind: raw
+  grain: one row per (reporting_period, fms_id, managing_agency, fiscal_year)
+  description: >-
+    Raw mirror of gyhf-rsr3 (planned budget by fiscal year). All VARCHAR. Field
+    semantics: describe_field(dataset='raw_budget_fy').
+
+schedule_budget_link:
+  kind: analytics
+  grain: one row per (reporting_period, pid, fms_id, managing_agency) edge
+  description: >-
+    PID↔FMS link edges per period, with per-period cardinality counts
+    (n_budgets_for_pid, n_pids_for_budget) and the edge's commitments.
+  keying_notes: >-
+    All-history of edges: a PID's CURRENT links are the edges at ITS OWN latest
+    reporting_period (stale links are not current).
+
+schedule_history:
+  kind: analytics
+  grain: one row per (pid, reporting_period)
+  description: >-
+    Typed schedule snapshots — fb86 spine joined with 95tx variance; phases
+    canonicalized, lifecycle_status derived, borough scalar + list derived from
+    funding lines.
+  column_notes:
+    variance_day: signed per-period forecast delta in days (positive = later)
+    lifecycle_status: >-
+      derived: 'completed' when actual_construction_end exists OR phase is
+      Close-out/(Completed); 'cancelled' for (Cancelled)/(Withdrawn)/(Terminated)/
+      (Defaulted); else 'in_progress'
+    borough: "scalar derived from lines: 1 specific borough → it; 2+ → 'Multiple'; only Citywide → 'Citywide'"
+    boroughs: distinct line-level borough list (line-keyed location)
+
+budget_history:
+  kind: analytics
+  grain: one row per (fms_id, managing_agency, reporting_period)
+  description: >-
+    Typed budget/spend snapshots (snapshot rows only — adoption records live in
+    original_budget).
+  keying_notes: >-
+    Budget comparisons key on (managing_agency, fms_id) — never fms_id alone; an
+    FMS id held by several agencies is several distinct lines.
+
+original_budget:
+  kind: analytics
+  grain: one row per (fms_id, managing_agency)
+  description: >-
+    The adopted/first-recorded budget per line, from the raw NULL-spend adoption
+    records. recorded_period is the adoption month — any calendar month, NOT a
+    reporting snapshot.
+
+project_budget_fy:
+  kind: analytics
+  grain: one row per (fms_id, managing_agency, reporting_period, fiscal_year)
+  description: Typed fiscal-year planned budget (city / non_city / spend).
+
+pid_funding:
+  kind: analytics
+  grain: one row per pid
+  description: >-
+    Per-PID rollup of its CURRENT (latest link-period) funding lines:
+    n_linked_budgets, attributed_budget, linked_budgets list.
+
+latest_project_state:
+  kind: analytics
+  grain: one row per pid (its own latest snapshot)
+  description: >-
+    Each PID's latest schedule_history row plus funding attribution — the
+    schedule-side workhorse for current-state questions.
+  keying_notes: >-
+    'Latest' is the PID's OWN latest reporting_period, which for PIDs that left
+    the reporting universe predates the global latest period.
+
+fms_location:
+  kind: analytics
+  grain: one row per (fms_id, managing_agency) — ALL-HISTORY, no reporting_period
+  description: >-
+    Line-level location dimension (borough, community_board) from the line's
+    latest in-cadence raw row. The budget side's native location — borough-scoped
+    budget questions need no PID crossing.
+  keying_notes: >-
+    All-history dim: JOIN to enrich; do NOT count rows as a single period's
+    inventory.
+
+cumulative_schedule_variance:
+  kind: analytics
+  grain: one row per pid
+  description: >-
+    Lifetime sum of per-period variance days (artifact-guarded), latest period
+    variance, latest forecast.
+  column_notes:
+    cumulative_variance_days: signed lifetime day total (positive = later)
+
+lifetime_budget_variance:
+  kind: analytics
+  grain: one row per (fms_id, managing_agency) — ALL-HISTORY, no reporting_period
+  description: >-
+    Per-line lifetime budget view — original (adopted preferred, else first
+    snapshot; original_budget_source says which), latest, cumulative change,
+    spend, last-period variance, over_budget flag.
+  keying_notes: >-
+    All-history dim: JOIN to enrich or for lifetime figures; do NOT count rows as
+    a single period's inventory. over_budget is LAST-PERIOD basis by design;
+    cumulative growth is cumulative_budget_change > 0.
+
+agency_rollup_by_period:
+  kind: analytics
+  grain: one row per (managing_agency, reporting_period)
+  description: >-
+    Per-agency per-period counts (PIDs, completed, delayed) and deduped budget /
+    spend totals.
+
+fms_sponsor:
+  kind: analytics
+  grain: one row per (fms_id, sponsor_agency) — ALL-HISTORY, no reporting_period
+  description: >-
+    Budget-side owner bridge (atomic sponsors; composite 'DOT, DPR' strings are
+    split). Sponsor-scoped budget sums use the semi-join
+    fms_id IN (SELECT fms_id FROM fms_sponsor WHERE sponsor_agency = ...) — a
+    value-bearing JOIN fans out and double-counts.
+
+agency_dim:
+  kind: dimension
+  grain: one row per agency slug
+  description: >-
+    Curated agency dictionary (agencies.yaml) + live CPD presence +
+    schedule-executor flag.
+
+category_dim:
+  kind: dimension
+  grain: one row per fms_id
+  description: >-
+    Curated category assignment per budget line (categories.yaml: ten-year plan
+    keyword / sponsor routing / fms-id prefix precedence).
