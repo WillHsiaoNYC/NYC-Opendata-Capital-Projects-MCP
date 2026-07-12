@@ -4,6 +4,7 @@ from __future__ import annotations
 import duckdb
 
 from ..agencies import SCHEDULE_EXECUTORS
+from ..data_dictionary import load_dictionary
 from ..dbio import rows_as_dicts
 from ..primer import DOMAIN_RULES
 from ..provenance import source_descriptor
@@ -26,17 +27,46 @@ def _columns_by_sid(con: duckdb.DuckDBPyConnection) -> dict[str, list]:
     return by_sid
 
 
+# dataset (raw table) -> (typed period source, in-band caveat). Periods are read from
+# the TYPED tables: they are cadence-filtered and exclude qj5n's original-budget
+# adoption records (any calendar month, either side of the cadence window — tracked
+# in original_budget, never reporting snapshots).
+_PERIOD_SOURCES = {
+    "raw_project_detail": ("schedule_history", None),
+    "raw_schedule_history": ("schedule_history",
+        "Periods via schedule_history, whose period spine is fb86 "
+        "(raw_project_detail) — identical lists today."),
+    "raw_budget_history": ("budget_history",
+        "Snapshot periods only. Raw rows with NULL spend_to_date are original-budget "
+        "ADOPTION records stamped with any calendar month (tracked in "
+        "original_budget) — not reporting snapshots, so not listed here."),
+    "raw_budget_fy": ("project_budget_fy", None),
+}
+
+
 def dataset_info_from(con: duckdb.DuckDBPyConnection) -> dict:
     datasets = rows_as_dicts(con, """
         SELECT dataset_id, period_column, row_count, latest_reporting_period,
                rows_updated_at, ingest_completed_at, fms_data_date, agency_data_date
         FROM meta ORDER BY dataset_id
     """)
+    by_sid_source = {t.get("socrata_id"): _PERIOD_SOURCES[name]
+                     for name, t in load_dictionary().items()
+                     if name in _PERIOD_SOURCES}
+    for d in datasets:
+        src = by_sid_source.get(d["dataset_id"])
+        if src and _table_exists(con, src[0]):
+            d["available_periods"] = [r[0] for r in con.execute(
+                f"SELECT DISTINCT reporting_period FROM {src[0]} ORDER BY 1").fetchall()]
+            if src[1]:
+                d["period_note"] = src[1]
     caveats = [
         "Reporting periods end in 01/05/09 (Jan/May/Sep); spend reports only those periods.",
         "Null forecast dates often mean 'suppressed', not 'missing'.",
         "Some categories are filtered out upstream before publication.",
         "managing_agency = executor on schedule rows, budget-holder on budget rows.",
+        "available_periods lists each dataset's reporting snapshots (from the typed "
+        "tables); qj5n adoption-month original-budget records are intentionally absent.",
     ]
     if _table_exists(con, "column_dict"):
         # fold a compact field dictionary into each dataset (full detail via describe_field)

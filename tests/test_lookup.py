@@ -102,3 +102,24 @@ def test_describe_table_raw_points_to_describe_field():
 def test_describe_table_unknown_errors_with_valid_names():
     out = lookup.describe_table_from(_built_con(), table="nope")
     assert "error" in out and "schedule_history" in out["error"]
+
+
+def test_dataset_info_without_typed_tables_still_works(con):
+    info = lookup.dataset_info_from(con)          # no materialize: no periods key
+    fb = next(d for d in info["datasets"] if d["dataset_id"] == "fb86-vt7u")
+    assert "available_periods" not in fb
+
+
+def test_dataset_info_available_periods_from_typed_tables():
+    c = _built_con()
+    c.execute(
+        "INSERT INTO meta VALUES "
+        "('fb86-vt7u','reporting_period',1738000000,now(),100,'h',1,'202601','2025-09-30','2026-04-16'),"
+        "('qj5n-h5qp','year_month_reported',1738000000,now(),100,'h',1,'202601',NULL,NULL)"
+    )
+    info = lookup.dataset_info_from(c)
+    fb = next(d for d in info["datasets"] if d["dataset_id"] == "fb86-vt7u")
+    qj = next(d for d in info["datasets"] if d["dataset_id"] == "qj5n-h5qp")
+    assert fb["available_periods"] == ["202601"]
+    assert qj["available_periods"] == ["202509", "202601"]   # snapshots only
+    assert "adoption" in qj["period_note"].lower()           # original-budget caveat
