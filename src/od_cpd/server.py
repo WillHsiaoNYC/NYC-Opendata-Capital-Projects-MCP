@@ -184,11 +184,15 @@ def budget_breakdown(group_by: str = "managing_agency", metric: str = "total_bud
 
 @mcp.tool()
 def budget_change(target: str, from_period: str, to_period: str,
-                  metric: str = "total_budget", agency_role: str = "auto") -> dict:
+                  metric: str = "total_budget", agency_role: str = "auto",
+                  managing_agency: str | None = None) -> dict:
     """Δ budget/spend for an agency ('agency:DEP') or FMS line ('fms:ABC') between two periods.
     For an agency target, `agency_role` ('auto'|'sponsor'|'managing') picks the lens; sponsor
-    scope uses the latest-period owner set (as-of caveat in the result label)."""
-    return _with_conn(budget_change_from, target, from_period, to_period, metric, agency_role)
+    scope uses the latest-period owner set (as-of caveat in the result label). An FMS id held
+    by several managing agencies is several distinct budget lines: the result then lists
+    per-line deltas (never a cross-agency sum); pass `managing_agency` to scope to one line."""
+    return _with_conn(budget_change_from, target, from_period, to_period, metric,
+                      agency_role, managing_agency)
 
 
 @mcp.tool()

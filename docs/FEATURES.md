@@ -5,7 +5,7 @@
 > and bump the "Last updated" date. This file is the canonical inventory of what
 > the server does and the rules it encodes.
 >
-> _Last updated: 2026-06-16_
+> _Last updated: 2026-07-12_
 
 The MCP serves NYC Capital Projects data (4 Socrata datasets) over a local DuckDB,
 with domain rules baked in so callers don't have to rediscover them.
@@ -30,7 +30,7 @@ with domain rules baked in so callers don't have to rediscover them.
 
 **Budget analytics**
 - `budget_breakdown` — budget/spend by agency or category, deduped on (fms_id, managing_agency); category is line-grain via `category_dim` (one category per line — additive)
-- `budget_change` — Δ budget/spend for an agency or FMS line between periods
+- `budget_change` — Δ budget/spend for an agency or FMS line between periods. An FMS id held by several managing agencies is several distinct lines (the (managing_agency, fms_id) grain): the result lists per-line deltas — never a cross-agency sum; optional `managing_agency` scopes to one line
 
 **Portfolio**
 - `project_portfolio` — PID-grain cross-section: filter by category ∩ borough ∩ community_board ∩ lifecycle_status ∩ agency(+role), ordered by nearest completion (NULLs last). Borough filters match the line-derived `boroughs` list (multi-borough PIDs found by any borough); summary covers the FULL filtered set with BOTH budget bases — per-PID `attributed_budget_total` (shared lines count on each PID) and deduped `line_budget_total` (the cash view). Replaces the recurring "category ∩ borough ∩ status, schedule⨝budget, by completion" `run_sql` pattern
