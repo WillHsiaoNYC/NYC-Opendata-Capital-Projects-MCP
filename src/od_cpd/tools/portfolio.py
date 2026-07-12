@@ -38,7 +38,17 @@ def project_portfolio_from(con, category=None, borough=None, community_board=Non
         where.append("(list_contains(s.boroughs, ?) OR s.borough = ?)")
         params += [borough, borough]
     if community_board is not None:
-        where.append("s.pid IN (SELECT l.pid FROM schedule_budget_link l "
+        # Match only the PID's CURRENT (latest link-period) funding lines:
+        # schedule_budget_link is all-history, so a line dropped in an earlier
+        # period must not resurrect the PID (mirrors inspect.py's link rule).
+        # QUALIFY the latest period in an inner subquery with NO CB predicate —
+        # applying WHERE community_board first would compute max(period) over only
+        # CB-matching rows and let stale matches survive.
+        where.append("s.pid IN (SELECT cur.pid FROM ("
+                     "SELECT l.pid, l.fms_id, l.managing_agency "
+                     "FROM schedule_budget_link l "
+                     "QUALIFY l.reporting_period = "
+                     "max(l.reporting_period) OVER (PARTITION BY l.pid)) cur "
                      "JOIN fms_location fl USING (fms_id, managing_agency) "
                      "WHERE fl.community_board = ?)")
         params.append(community_board)
