@@ -55,6 +55,61 @@ def test_budget_change_agency_role_aware_target():
     assert "as-of" in r["label"].lower()      # temporal caveat surfaced
 
 
+def _shared_fms_db():
+    """_raw + one FMS id held by TWO managing agencies (two distinct budget lines)."""
+    con = duckdb.connect(":memory:"); _raw(con)
+    con.executemany(
+        "INSERT INTO raw_budget_history (managing_agency, fms_id, year_month_reported,"
+        " total_budget, spend_to_date) VALUES (?,?,?,?,?)",
+        [["DDC", "SHARED", "202509", "100", "0"],
+         ["DDC", "SHARED", "202601", "80", "0"],    # DDC's line cut by 20
+         ["DOT", "SHARED", "202509", "50", "0"],
+         ["DOT", "SHARED", "202601", "90", "0"]])   # DOT's line grew by 40
+    materialize.materialize_all(con)
+    return con
+
+
+def test_budget_change_fms_multi_agency_lists_lines_never_sums():
+    # Grain rule: (managing_agency, fms_id). A cross-agency sum would report +20 and
+    # mask DDC's cut with DOT's growth — the tool must list per-line deltas instead.
+    r = budget_change_from(_shared_fms_db(), target="fms:SHARED",
+                           from_period="202509", to_period="202601")
+    assert r["change"]["value"] is None
+    assert r["from_value"] is None and r["to_value"] is None
+    lines = {l["managing_agency"]: l for l in r["lines"]}
+    assert lines["DDC"]["change"]["value"] == -20.0
+    assert lines["DDC"]["change"]["direction"] == "decreased"
+    assert lines["DOT"]["change"]["value"] == 40.0
+    assert lines["DOT"]["change"]["direction"] == "increased"
+    assert "(managing_agency, fms_id)" in r["label"]
+
+
+def test_budget_change_fms_managing_agency_scopes_to_one_line():
+    r = budget_change_from(_shared_fms_db(), target="fms:SHARED",
+                           from_period="202509", to_period="202601",
+                           managing_agency="DDC")
+    assert r["from_value"] == 100.0 and r["to_value"] == 80.0
+    assert r["change"]["value"] == -20.0
+    assert r["managing_agency"] == "DDC"
+    assert "lines" not in r
+
+
+def test_budget_change_fms_single_agency_keeps_flat_shape():
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    r = budget_change_from(con, target="fms:A", from_period="202509", to_period="202601")
+    assert r["from_value"] == 90.0 and r["to_value"] == 100.0
+    assert r["change"]["value"] == 10.0
+    assert r["managing_agency"] == "DDC"    # single line: the holder is echoed
+    assert "lines" not in r
+
+
+def test_budget_change_agency_target_rejects_managing_agency_param():
+    con = _scope_db(duckdb.connect(":memory:"))
+    r = budget_change_from(con, target="agency:DOC", from_period="202509",
+                           to_period="202601", managing_agency="DDC")
+    assert "error" in r
+
+
 def test_budget_change_agency_missing_period_no_fabricated_delta():
     # Agency-path coverage for the missing-period guard (the fms: path is covered in
     # test_review_fixes): DOC budget exists only at 202601, so a 202501 from_period has no

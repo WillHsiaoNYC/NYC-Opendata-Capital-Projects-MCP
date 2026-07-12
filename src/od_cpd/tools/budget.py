@@ -60,8 +60,21 @@ def budget_breakdown_from(con, group_by="managing_agency", metric="total_budget"
     return result
 
 
+def _change_envelope(fv, tv):
+    """Signed delta envelope for one line/scope.
+
+    Doesn't fabricate a delta when a period is absent (e.g. off-cadence or before
+    the data starts).
+    """
+    if fv is None or tv is None:
+        return {"value": None, "direction": None,
+                "note": "One or both periods have no data; cannot compute a change."}
+    d = tv - fv
+    return {"value": d, "direction": direction_of(d, kind="budget")}
+
+
 def budget_change_from(con, target, from_period, to_period, metric="total_budget",
-                       agency_role="auto"):
+                       agency_role="auto", managing_agency=None):
     """target = 'agency:DEP' or 'fms:ABC'. Δ of metric between two periods (source LAG-aware)."""
     col = _METRICS.get(metric)
     if not col:
@@ -71,7 +84,11 @@ def budget_change_from(con, target, from_period, to_period, metric="total_budget
         return {"error": "target must be 'agency:<NAME>' or 'fms:<FMS_ID>'"}
     scope = None
     label = None
+    extra = {}
     if kind == "agency":
+        if managing_agency:
+            return {"error": "managing_agency applies only to fms: targets "
+                             "(an agency target already scopes by agency)"}
         scope = resolve_agency_scope(con, val, agency_role, entity="budget")
         if "error" in scope:
             return scope
@@ -80,25 +97,60 @@ def budget_change_from(con, target, from_period, to_period, metric="total_budget
         if scope["agency_scope"]["role"] == "sponsor":
             label = ("Sponsor set is as-of the latest period, applied to the historical "
                      "periods compared here (a line's owner/linkage may have differed then).")
+        sql = (f"WITH d AS (SELECT DISTINCT fms_id, managing_agency, reporting_period, {col} "
+               f"FROM budget_history WHERE {filt} AND reporting_period IN (?, ?)) "
+               f"SELECT reporting_period, sum({col}) AS total FROM d GROUP BY reporting_period "
+               f"ORDER BY reporting_period")
+        rows = rows_as_dicts(con, sql, params)
+        by = {r["reporting_period"]: r["total"] for r in rows}
+        fv, tv = by.get(from_period), by.get(to_period)
     else:
+        # An FMS id is NOT a budget line: the grain is (managing_agency, fms_id), and
+        # the same id under two agencies is two distinct lines. Summing them can mask
+        # one line's cut with the other's growth — so the delta is computed PER LINE
+        # and only collapsed when a single line remains.
         filt = "lower(fms_id) = lower(?)"  # FMS ids stored uppercase; accept any case
-        params = [val, from_period, to_period]
-    sql = (f"WITH d AS (SELECT DISTINCT fms_id, managing_agency, reporting_period, {col} "
-           f"FROM budget_history WHERE {filt} AND reporting_period IN (?, ?)) "
-           f"SELECT reporting_period, sum({col}) AS total FROM d GROUP BY reporting_period "
-           f"ORDER BY reporting_period")
-    rows = rows_as_dicts(con, sql, params)
-    by = {r["reporting_period"]: r["total"] for r in rows}
-    fv, tv = by.get(from_period), by.get(to_period)
-    # Don't fabricate a delta when a period is absent (e.g. off-cadence or before the data starts).
-    if fv is None or tv is None:
-        change = {"value": None, "direction": None,
-                  "note": "One or both periods have no data; cannot compute a change."}
-    else:
-        d = tv - fv
-        change = {"value": d, "direction": direction_of(d, kind="budget")}
+        params = [val]
+        if managing_agency:
+            filt += " AND managing_agency = ?"
+            params.append(managing_agency)
+        params += [from_period, to_period]
+        sql = (f"WITH d AS (SELECT DISTINCT fms_id, managing_agency, reporting_period, {col} "
+               f"FROM budget_history WHERE {filt} AND reporting_period IN (?, ?)) "
+               f"SELECT managing_agency, reporting_period, sum({col}) AS total FROM d "
+               f"GROUP BY managing_agency, reporting_period "
+               f"ORDER BY managing_agency, reporting_period")
+        rows = rows_as_dicts(con, sql, params)
+        per: dict[str, dict] = {}
+        for r in rows:
+            per.setdefault(r["managing_agency"], {})[r["reporting_period"]] = r["total"]
+        lines = [{"managing_agency": ag,
+                  "from_value": v.get(from_period), "to_value": v.get(to_period),
+                  "change": _change_envelope(v.get(from_period), v.get(to_period))}
+                 for ag, v in sorted(per.items())]
+        if len(lines) > 1:
+            label = (f"{len(lines)} distinct budget lines hold this FMS id (one per "
+                     f"managing agency) — per-line changes are in `lines`; the "
+                     f"(managing_agency, fms_id) grain forbids summing them. Pass "
+                     f"managing_agency to scope to one line.")
+            result = {"target": target, "from_period": from_period, "to_period": to_period,
+                      "from_value": None, "to_value": None,
+                      "change": {"value": None, "direction": None,
+                                 "note": "Multiple lines — no combined delta; see `lines`."},
+                      "lines": lines, "label": label,
+                      "provenance": provenance_block(
+                          definition=f"Δ {metric} {from_period}→{to_period} per line",
+                          scope={"target": target, "dedup": "(fms_id, managing_agency)",
+                                 "managing_agency": managing_agency, "agency_role": agency_role},
+                          row_count=len(rows), reproduce_sql=interpolate_sql(sql, params))}
+            return result
+        fv = lines[0]["from_value"] if lines else None
+        tv = lines[0]["to_value"] if lines else None
+        if lines:
+            extra = {"managing_agency": lines[0]["managing_agency"]}
     result = {"target": target, "from_period": from_period, "to_period": to_period,
-              "from_value": fv, "to_value": tv, "change": change, "label": label,
+              "from_value": fv, "to_value": tv, "change": _change_envelope(fv, tv),
+              "label": label, **extra,
               "provenance": provenance_block(definition=f"Δ {metric} {from_period}→{to_period}",
                   scope={"target": target, "dedup": "(fms_id, managing_agency)",
                          "agency_role": agency_role},
