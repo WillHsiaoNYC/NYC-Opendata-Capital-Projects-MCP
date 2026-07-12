@@ -105,3 +105,35 @@ def test_history_requires_exactly_one_anchor():
 
 def test_history_unknown_pid_errors():
     assert "error" in get_project_history_from(_history_con(), pid="999")
+
+
+def test_history_fms_period_series_signed():
+    r = get_project_history_from(_history_con(), fms_id="a")   # case-insensitive
+    assert len(r["lines"]) == 1
+    line = r["lines"][0]
+    assert line["fms_id"] == "A" and line["managing_agency"] == "DDC"
+    assert [p["reporting_period"] for p in line["periods"]] == ["202509", "202601"]
+    assert line["periods"][1]["total_budget"] == 100.0
+    assert line["periods"][1]["budget_variance"]["direction"] in (
+        "increased", "decreased", "unchanged")
+    assert r["anchor"]["type"] == "budget"
+
+
+def test_history_fms_adoption_only_line_is_header_only():
+    con = duckdb.connect(":memory:"); _raw(con)
+    # adoption record only (NULL spend_to_date), no snapshots
+    con.execute(
+        "INSERT INTO raw_budget_history (managing_agency, fms_id, year_month_reported,"
+        " total_budget, spend_to_date, budget_variance) "
+        "VALUES ('DPR','ZZ','201903','500',NULL,NULL)")
+    materialize.materialize_all(con)
+    r = get_project_history_from(con, fms_id="ZZ")
+    assert "error" not in r
+    line = r["lines"][0]
+    assert line["periods"] == []
+    assert line["original_budget"]["recorded_period"] == "201903"
+    assert "Adoption-only" in line["note"]
+
+
+def test_history_fms_unknown_errors():
+    assert "error" in get_project_history_from(_history_con(), fms_id="NOPE")

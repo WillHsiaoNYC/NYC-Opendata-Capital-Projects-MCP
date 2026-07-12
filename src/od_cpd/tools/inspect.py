@@ -106,4 +106,57 @@ def _schedule_history_answer(con: duckdb.DuckDBPyConnection, pid: str) -> dict:
 
 def _budget_history_answer(con: duckdb.DuckDBPyConnection, fms_id: str,
                            managing_agency: str | None) -> dict:
-    raise NotImplementedError  # Task 4 (PR 2b)
+    # lower(): FMS ids are stored uppercase but users type them as resolve accepted them.
+    where = "lower(fms_id) = lower(?)" + (" AND managing_agency = ?" if managing_agency else "")
+    params = [fms_id] + ([managing_agency] if managing_agency else [])
+    sql = (f"SELECT fms_id, managing_agency, reporting_period, total_budget, "
+           f"spend_to_date, spend_pct, budget_variance, budget_variance_pct "
+           f"FROM budget_history WHERE {where} ORDER BY managing_agency, reporting_period")
+    snap = rows_as_dicts(con, sql, params)
+    orig = rows_as_dicts(con,
+        f"SELECT fms_id, managing_agency, recorded_period, original_budget "
+        f"FROM original_budget WHERE {where}", params)
+    if not snap and not orig:
+        return {"error": f"No budget (FMS line) found for {fms_id}"}
+    orig_by_line = {(o["fms_id"], o["managing_agency"]): o for o in orig}
+    keys: list[tuple] = []
+    for r in snap + orig:
+        k = (r["fms_id"], r["managing_agency"])
+        if k not in keys:
+            keys.append(k)
+    lines = []
+    for k in keys:
+        periods = []
+        for r in snap:
+            if (r["fms_id"], r["managing_agency"]) != k:
+                continue
+            p = dict(r)
+            p.pop("fms_id"); p.pop("managing_agency")
+            p["budget_variance"] = signed_metric(p["budget_variance"], "budget")
+            periods.append(p)
+        o = orig_by_line.get(k)
+        line = {"fms_id": k[0], "managing_agency": k[1],
+                "original_budget": ({"amount": o["original_budget"],
+                                     "recorded_period": o["recorded_period"],
+                                     "note": "Adoption record (any calendar month), "
+                                             "not a reporting snapshot."} if o else None),
+                "periods": periods}
+        if not periods:
+            line["note"] = ("Adoption-only line: an original budget exists but no "
+                            "reporting snapshot yet — normal for early allocations.")
+        lines.append(line)
+    linked = rows_as_dicts(con,
+        f"SELECT DISTINCT pid, managing_agency FROM schedule_budget_link "
+        f"WHERE {where} QUALIFY reporting_period = max(reporting_period) OVER ()", params)
+    env = mm_envelope(anchor_type="budget", anchor_id=fms_id, linked=linked)
+    result = {"lines": lines, **env,
+              "provenance": provenance_block(
+                  definition="budget_history rows per line, period by period "
+                             "(+ original_budget header)",
+                  scope={"fms_id": fms_id, "managing_agency": managing_agency},
+                  row_count=len(snap), reproduce_sql=interpolate_sql(sql, params))}
+    if len(lines) > 1:
+        result["grain_note"] = ("This FMS id is held by multiple managing agencies — "
+                                "each is a distinct budget line ((managing_agency, "
+                                "fms_id) grain); never sum across lines.")
+    return result
