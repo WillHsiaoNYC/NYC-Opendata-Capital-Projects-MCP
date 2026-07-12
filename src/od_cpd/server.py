@@ -9,7 +9,8 @@ from .primer import PRIMER
 from .tools import lookup
 from .tools.sql import run_sql_on, validate_select
 from .tools.resolve import resolve_from
-from .tools.inspect import get_project_schedule_from, get_project_budget_from
+from .tools.inspect import (get_project_schedule_from, get_project_budget_from,
+                            get_project_history_from)
 from .tools.schedule import (schedule_breakdown_from, schedule_changes_from,
                              delay_reason_stats_from)
 from .tools.budget import budget_breakdown_from, budget_change_from
@@ -131,6 +132,19 @@ def get_project_budget(fms_id: str, managing_agency: str | None = None) -> dict:
     """Budget (FMS line): total, spend, variance; lists linked schedules. NB budget has
     no 'completed' state; spend%=100 ≠ done."""
     return _with_conn(get_project_budget_from, fms_id, managing_agency)
+
+
+@mcp.tool()
+def get_project_history(pid: str | None = None, fms_id: str | None = None,
+                        managing_agency: str | None = None) -> dict:
+    """Period-by-period history for ONE project. Schedule lens (pid=…): each period's
+    phase, forecast, signed variance, delay reason + a current-state header with
+    cumulative variance. Budget lens (fms_id=…, case-insensitive): each period's
+    budget/spend/signed variance per (managing_agency, fms_id) line + the adopted
+    original budget when recorded (adoption-only lines return header-only). Provide
+    exactly one of pid/fms_id; managing_agency scopes a multi-agency FMS id to one
+    line — otherwise ALL lines are listed."""
+    return _with_conn(get_project_history_from, pid, fms_id, managing_agency)
 
 
 @mcp.tool()
