@@ -35,6 +35,13 @@ def escape_like(s: str) -> str:
 LIKE_ESC = "LIKE ? ESCAPE '\\'"
 ILIKE_ESC = "ILIKE ? ESCAPE '\\'"
 
+# Forecast-placeholder artifacts: a few raw snapshots diff a placeholder date
+# against a real one, yielding variance values like −364,938 days. 100 years is
+# far beyond any real schedule move — day-valued stats exclude anything outside
+# ±this bound (shared by rank_projects and schedule_breakdown so the two can't
+# disagree on what counts as real).
+VARIANCE_ARTIFACT_DAYS = 36500
+
 # One caption for every tool that groups by borough, so the derivation rule reads
 # identically everywhere (borough is line-keyed; the PID scalar is derived).
 BOROUGH_GROUP_NOTE = (

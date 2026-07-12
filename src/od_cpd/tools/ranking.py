@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from ..dbio import rows_as_dicts, sql_literal
 from ..provenance import provenance_block
-from ._common import category_pid_filter, interpolate_sql, signed_metric
+from ._common import (VARIANCE_ARTIFACT_DAYS, category_pid_filter, interpolate_sql,
+                      signed_metric)
 from .agency_scope import resolve_agency_scope
 
 _SCHEDULE_METRICS = {"period_variance_days", "cumulative_variance_days"}
@@ -35,7 +36,8 @@ def rank_projects_from(con, entity, rank_by, n=10, direction="top",
         src = ("latest_project_state s LEFT JOIN cumulative_schedule_variance c USING (pid)"
                if rank_by == "cumulative_variance_days" else "latest_project_state s")
         metric_expr = "c.cumulative_variance_days" if rank_by == "cumulative_variance_days" else f"s.{rank_by}"
-        where = [f"{metric_expr} IS NOT NULL", f"{metric_expr} BETWEEN -36500 AND 36500"]
+        where = [f"{metric_expr} IS NOT NULL",
+                 f"{metric_expr} BETWEEN -{VARIANCE_ARTIFACT_DAYS} AND {VARIANCE_ARTIFACT_DAYS}"]
         params = []
         if min_total_budget is not None:
             where.append("s.attributed_budget >= ?"); params.append(min_total_budget)
