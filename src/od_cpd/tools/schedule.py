@@ -6,7 +6,7 @@ from ..dbio import rows_as_dicts
 from ..periods import is_cadence_period
 from ..provenance import provenance_block
 from ._common import (BOROUGH_GROUP_NOTE, CATEGORY_GROUP_NOTE, VARIANCE_ARTIFACT_DAYS,
-                      current_period, direction_of, interpolate_sql)
+                      direction_of, interpolate_sql, resolve_period)
 from .agency_scope import resolve_agency_scope
 
 _GROUPABLE = {"managing_agency", "sponsor_agency", "borough", "phase_norm",
@@ -25,9 +25,9 @@ def schedule_breakdown_from(con, group_by, metric="count", statistic="count",
                             period="current", agency=None, agency_role="auto"):
     if group_by not in _GROUPABLE:
         return {"error": f"group_by must be one of {sorted(_GROUPABLE)}"}
-    p = current_period(con, "schedule_history") if period == "current" else period
-    if p is None:
-        return {"error": "No schedule data available — run `od-cpd init`."}
+    p, err = resolve_period(con, "schedule_history", period)
+    if err:
+        return err
     where = "reporting_period = ?"
     params = [p]
     scope = None
@@ -105,9 +105,9 @@ def delay_reason_stats_from(con, period="current", agency=None, scope="current",
     where = "variance_day > 0 AND reason_for_delay IS NOT NULL"
     params = []
     if scope != "all_history":
-        p = current_period(con, "schedule_history") if period == "current" else period
-        if p is None:
-            return {"error": "No schedule data available — run `od-cpd init`."}
+        p, err = resolve_period(con, "schedule_history", period)
+        if err:
+            return err
         where += " AND reporting_period = ?"; params.append(p)
     else:
         p = "all_history"

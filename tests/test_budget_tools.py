@@ -16,6 +16,27 @@ def test_budget_breakdown_by_agency_deduped():
     assert "(fms_id, managing_agency)" in r["provenance"]["scope"]["dedup"]
 
 
+def test_budget_breakdown_offcadence_period_errors():
+    # '202511' is off-cadence (Nov ∉ Jan/May/Sep) — must error, not silently match nothing.
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    r = budget_breakdown_from(con, period="202511")
+    assert "error" in r
+
+
+def test_budget_breakdown_absent_cadence_period_errors():
+    # '202105' is a valid cadence period but absent from the data — must error.
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    r = budget_breakdown_from(con, period="202105")
+    assert "error" in r
+
+
+def test_budget_breakdown_real_explicit_period_still_works():
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    r = budget_breakdown_from(con, period="202601")
+    assert "error" not in r
+    assert r["period"] == "202601"
+
+
 def test_budget_change_agency_ddc_increase():
     con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
     # Populate agency_dim so resolve_agency_scope can find DDC (role=managing)

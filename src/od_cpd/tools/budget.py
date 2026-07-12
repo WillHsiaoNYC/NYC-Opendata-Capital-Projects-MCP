@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from ..dbio import rows_as_dicts
 from ..provenance import provenance_block
-from ._common import current_period, direction_of, interpolate_sql
+from ._common import direction_of, interpolate_sql, resolve_period
 from .agency_scope import resolve_agency_scope
 
 # borough/sponsor are excluded: they live on the schedule edge (M:M double-count
@@ -25,9 +25,9 @@ def budget_breakdown_from(con, group_by="managing_agency", metric="total_budget"
     """
     if group_by not in _GROUPABLE:
         return {"error": f"group_by must be one of {sorted(_GROUPABLE)} (v1)"}
-    p = current_period(con, "budget_history") if period == "current" else period
-    if p is None:
-        return {"error": "No budget data available — run `od-cpd init`."}
+    p, err = resolve_period(con, "budget_history", period)
+    if err:
+        return err
     col = _METRICS.get(metric)
     if not col:
         return {"error": _METRIC_ERR}
