@@ -102,13 +102,13 @@ def schedule_breakdown_from(con, group_by, metric="count", statistic="count",
 
 def delay_reason_stats_from(con, period="current", agency=None, scope="current",
                             agency_role="auto"):
-    where = "variance_day > 0 AND reason_for_delay IS NOT NULL"
+    base_where = "variance_day > 0"
     params = []
     if scope != "all_history":
         p, err = resolve_period(con, "schedule_history", period)
         if err:
             return err
-        where += " AND reporting_period = ?"; params.append(p)
+        base_where += " AND reporting_period = ?"; params.append(p)
     else:
         p = "all_history"
     ascope = None
@@ -116,15 +116,24 @@ def delay_reason_stats_from(con, period="current", agency=None, scope="current",
         ascope = resolve_agency_scope(con, agency, agency_role, entity="schedule")
         if "error" in ascope:
             return ascope
-        where += f" AND {ascope['where']}"
+        base_where += f" AND {ascope['where']}"
     sql = (f"SELECT reason_for_delay, count(*) AS n FROM schedule_history "
-           f"WHERE {where} GROUP BY reason_for_delay ORDER BY n DESC")
+           f"WHERE {base_where} AND reason_for_delay IS NOT NULL "
+           f"GROUP BY reason_for_delay ORDER BY n DESC")
     rows = rows_as_dicts(con, sql, params)
-    result = {"reasons": rows, "scope": p,
-              "label": f"Delay reasons are populated only when variance_day>0. Scope: {p}.",
-              "provenance": provenance_block(definition="distribution of reason_for_delay (variance>0)",
-                  scope={"period": p, "agency": agency, "agency_role": agency_role}, row_count=len(rows),
-                  reproduce_sql=interpolate_sql(sql, params))}
+    delayed_total, with_reason = con.execute(
+        f"SELECT count(*), count(reason_for_delay) FROM schedule_history "
+        f"WHERE {base_where}", params).fetchone()
+    result = {"reasons": rows,
+              "coverage": {"delayed_total": delayed_total, "with_reason": with_reason,
+                           "without_reason": delayed_total - with_reason},
+              "scope": p,
+              "label": (f"Delay reasons are populated only when variance_day>0. Scope: {p}. "
+                        "coverage gives the denominator: delayed rows with vs without a reason."),
+              "provenance": provenance_block(
+                  definition="distribution of reason_for_delay (variance>0)",
+                  scope={"period": p, "agency": agency, "agency_role": agency_role},
+                  row_count=len(rows), reproduce_sql=interpolate_sql(sql, params))}
     if ascope is not None:
         result["agency_scope"] = ascope["agency_scope"]
     return result

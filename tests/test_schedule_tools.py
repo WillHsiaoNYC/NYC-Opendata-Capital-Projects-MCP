@@ -143,3 +143,24 @@ def test_schedule_breakdown_by_sponsor_splits_composite():
     keys = {g["sponsor_agency"] for g in r["groups"]}
     assert "," not in "".join(keys)          # no composite bucket label
     assert {"DOT", "DPR"} <= keys            # 203's owners appear as separate buckets
+
+
+def test_delay_reason_stats_coverage_counts():
+    con = duckdb.connect(":memory:"); _raw(con)
+    # a delayed PID WITHOUT a reason (variance>0, reason NULL)
+    con.execute(
+        "INSERT INTO raw_project_detail (reporting_period, managing_agency, sponsor_agency,"
+        " pid, fms_id, total_budget, current_phase, borough) "
+        "VALUES ('202601','DDC','DDC','555','H','10','Design','K')")
+    con.execute(
+        "INSERT INTO raw_schedule_history (reporting_period, managing_agency, pid,"
+        " current_phase, completion_date, completion_date_type, variance_day) "
+        "VALUES ('202601','DDC','555','Design','2027-06-01','Forecast','30')")
+    materialize.materialize_all(con)
+    r = delay_reason_stats_from(con)
+    cov = r["coverage"]
+    assert cov["delayed_total"] == cov["with_reason"] + cov["without_reason"]
+    # Both delayed PIDs at 202601 (101 var=45, 555 var=30) have NULL reasons in the fixture.
+    assert cov["delayed_total"] == 2
+    assert cov["with_reason"] == 0
+    assert cov["without_reason"] == 2
