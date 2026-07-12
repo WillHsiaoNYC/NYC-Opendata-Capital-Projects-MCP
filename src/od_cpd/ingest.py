@@ -5,6 +5,7 @@ import csv as _csv
 import hashlib
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -107,6 +108,15 @@ def atomic_swap(shadow: Path, final: Path) -> None:
     os.replace(shadow, final)
 
 
+def _download_dataset(dataset_id: str, tmp: Path) -> tuple[socrata.Metadata, Path]:
+    """Fetch metadata + stream the CSV for one dataset. Pure network I/O — touches
+    no DuckDB connection, so it is safe to run across threads. Returns (meta, path)."""
+    meta = socrata.fetch_metadata(dataset_id)
+    csv = tmp / f"{dataset_id}.csv"
+    socrata.download_csv(dataset_id, csv)
+    return meta, csv
+
+
 def run_ingest() -> dict:
     """Download all datasets → build shadow DB → atomic swap. Returns a summary."""
     var = var_dir()
@@ -119,10 +129,15 @@ def run_ingest() -> dict:
     summary: dict[str, int] = {}
     try:
         schema.apply_schema(con)
-        for dataset_id, ds in DATASETS.items():
-            meta = socrata.fetch_metadata(dataset_id)
-            csv = tmp / f"{dataset_id}.csv"
-            socrata.download_csv(dataset_id, csv)
+        # Downloads are independent network I/O — fetch all four in parallel, then
+        # load into the single DuckDB connection sequentially (a connection is not
+        # thread-safe). ex.map re-raises any download/metadata failure as its result
+        # is consumed below, before any load — preserving fail-fast semantics.
+        with ThreadPoolExecutor(max_workers=len(DATASETS)) as ex:
+            downloads = dict(zip(DATASETS, ex.map(
+                lambda ds: _download_dataset(ds, tmp), DATASETS)))
+        for dataset_id in DATASETS:
+            meta, csv = downloads[dataset_id]
             table = schema.TABLE_FOR_DATASET[dataset_id]
             n = load_raw_csv(con, table, csv)
             write_meta(con, dataset_id, table, meta.rows_updated_at, meta.columns)
