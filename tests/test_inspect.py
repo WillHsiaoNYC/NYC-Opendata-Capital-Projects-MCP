@@ -137,3 +137,10 @@ def test_history_fms_adoption_only_line_is_header_only():
 
 def test_history_fms_unknown_errors():
     assert "error" in get_project_history_from(_history_con(), fms_id="NOPE")
+
+
+def test_schedule_and_history_surface_forecast_past_due():
+    con = _history_con()
+    assert get_project_schedule_from(con, "101")["answer"]["forecast_past_due"] is False
+    r = get_project_history_from(con, pid="101")
+    assert r["current_state"]["forecast_past_due"] is False

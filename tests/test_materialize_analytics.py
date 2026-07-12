@@ -107,3 +107,38 @@ def test_fms_location_carries_latest_nonnull_name():
     name = con.execute("SELECT fms_project_name FROM fms_location "
                        "WHERE fms_id='NM1' AND managing_agency='DPR'").fetchone()[0]
     assert name == "Old Name"
+
+
+def _past_due_rows(con):
+    # four PIDs at 202601: past-due; completed-by-phase; actual-completion-date; due-now
+    con.executemany(
+        "INSERT INTO raw_project_detail (reporting_period, managing_agency, sponsor_agency,"
+        " pid, fms_id, total_budget, current_phase, borough, forecast_completion) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        [["202601","DDC","DDC","901","P1","10","Construction","K","2025-06-30"],
+         ["202601","DDC","DDC","902","P2","10","Close-out","K","2025-06-30"],
+         ["202601","DDC","DDC","903","P3","10","Construction","K","2025-06-30"],
+         ["202601","DDC","DDC","904","P4","10","Construction","K","2026-01-15"]])
+    con.execute(
+        "INSERT INTO raw_schedule_history (reporting_period, managing_agency, pid,"
+        " current_phase, completion_date, completion_date_type, variance_day) "
+        "VALUES ('202601','DDC','903','Construction','2025-06-30','Actual','0')")
+
+
+def test_forecast_past_due_definition():
+    con = duckdb.connect(":memory:"); _raw(con); _past_due_rows(con)
+    materialize.materialize_all(con)
+    flags = dict(con.execute(
+        "SELECT pid, forecast_past_due FROM latest_project_state "
+        "WHERE pid IN ('901','902','903','904')").fetchall())
+    assert flags["901"] is True     # in_progress, forecast 2025-06-30 < 2026-01-01
+    assert flags["902"] is False    # Close-out phase → completed, NEVER past due
+    assert flags["903"] is False    # completion_date_type='Actual' → completed signal
+    assert flags["904"] is False    # forecast inside the snapshot month = due now
+
+
+def test_forecast_past_due_never_null():
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    n = con.execute("SELECT count(*) FROM latest_project_state "
+                    "WHERE forecast_past_due IS NULL").fetchone()[0]
+    assert n == 0

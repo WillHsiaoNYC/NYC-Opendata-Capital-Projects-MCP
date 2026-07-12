@@ -123,7 +123,9 @@ def resolve_project_reference(query: str) -> dict:
 
 @mcp.tool()
 def get_project_schedule(pid: str) -> dict:
-    """Schedule (PID): phase, lifecycle, signed variance, reason; lists linked budgets."""
+    """Schedule (PID): phase, lifecycle, signed variance, reason; lists linked budgets;
+    `forecast_past_due` flags a forecast already past as of the PID's own latest report
+    (never true for completed/cancelled)."""
     return _with_conn(get_project_schedule_from, pid)
 
 
@@ -215,7 +217,8 @@ def rank_projects(entity: str, rank_by: str, n: int = 10, direction: str = "top"
     Optional `category` (see list_categories) filters to one program type, e.g. 'Library'.
     Optional `agency` scopes to one agency; `agency_role` ('auto'|'sponsor'|'managing') picks
     the lens — 'auto' uses the owner (sponsor) view, except DDC/DCAS/EDC default to builder
-    (managing). Echoes agency_scope."""
+    (managing). Echoes agency_scope; schedule rows carry `forecast_past_due` — a forecast
+    already past as of the PID's own latest report (never true for completed/cancelled)."""
     return _with_conn(rank_projects_from, entity, rank_by, n, direction,
                       min_total_budget, max_total_budget, delayed_only, category,
                       agency, agency_role)
@@ -244,7 +247,8 @@ def project_portfolio(category: str | None = None, borough: str | None = None,
     state + attributed_budget; `summary` covers the FULL filtered set and reports
     BOTH budget bases (per-PID attributed vs deduped line_budget_total). Borough
     matches the PID's boroughs LIST, so multi-borough projects are found by any of
-    their boroughs."""
+    their boroughs. Rows carry `forecast_past_due` — a forecast already past as of
+    the PID's own latest report (never true for completed/cancelled)."""
     return _with_conn(project_portfolio_from, category, borough, community_board,
                       lifecycle_status, agency, agency_role, n)
 
