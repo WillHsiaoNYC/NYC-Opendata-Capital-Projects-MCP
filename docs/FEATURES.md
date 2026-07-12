@@ -5,7 +5,7 @@
 > and bump the "Last updated" date. This file is the canonical inventory of what
 > the server does and the rules it encodes.
 >
-> _Last updated: 2026-06-16_
+> _Last updated: 2026-07-12_
 
 The MCP serves NYC Capital Projects data (4 Socrata datasets) over a local DuckDB,
 with domain rules baked in so callers don't have to rediscover them.
@@ -23,7 +23,7 @@ with domain rules baked in so callers don't have to rediscover them.
 - `get_project_schedule` (PID) / `get_project_budget` (FMS line) — full detail + linked counterparts. Both sides list only counterparts from the anchor's LATEST link period (stale links are not current); FMS ids match case-insensitively
 
 **Schedule analytics**
-- `schedule_breakdown` — counts/averages by agency/sponsor/borough/phase/category. For `metric='schedule_variance'`, `statistic` ∈ {count, mean, median, sum, min, max} — anything else errors (no silent fallback); `count` results carry no direction (unsigned). Category grouping counts a PID once in EACH of its line-derived categories (non-additive, caveat in-band)
+- `schedule_breakdown` — counts/averages by agency/sponsor/borough/phase/category. For `metric='schedule_variance'`, `statistic` ∈ {count, mean, median, sum, min, max} — anything else errors (no silent fallback); `count` results carry no direction (unsigned). Variance statistics exclude forecast-placeholder artifacts (|variance| > 36,500 days — the guard shared with `rank_projects`) and echo the dropped count as `excluded_artifacts`. Category grouping counts a PID once in EACH of its line-derived categories (non-additive, caveat in-band)
 - `schedule_changes` — newly completed / newly delayed between two periods. BOTH change types compare `from_period` → `to_period` ("newly delayed" = positive variance at `to`, none at `from`). Periods are validated: off-cadence, inverted, or missing-`to_period` values error; a `from_period` predating the data is allowed and noted
 - `delay_reason_stats` — distribution of delay reasons
 - `project_duration_stats` — duration between two actual milestones; optional `group_by` (`managing_agency` | `borough` | `lifecycle_status`) returns per-group stats

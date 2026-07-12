@@ -27,6 +27,34 @@ def test_schedule_breakdown_mean_variance_signed():
     assert "direction" in str(r["groups"][0])  # signed framing present
 
 
+def test_schedule_breakdown_variance_excludes_placeholder_artifacts():
+    con = duckdb.connect(":memory:"); _raw(con)
+    # PID 777: a forecast-placeholder artifact (raw −364,938 days, like FDNY 3461)
+    con.execute(
+        "INSERT INTO raw_project_detail (reporting_period, managing_agency, sponsor_agency,"
+        " pid, fms_id, total_budget, current_phase, borough) "
+        "VALUES ('202601','DDC','DDC','777','G','10','Design','K')")
+    con.execute(
+        "INSERT INTO raw_schedule_history (reporting_period, managing_agency, pid,"
+        " current_phase, completion_date, completion_date_type, variance_day) "
+        "VALUES ('202601','DDC','777','Design','2028-01-01','Forecast','-364938')")
+    materialize.materialize_all(con)
+    r = schedule_breakdown_from(con, group_by="managing_agency",
+                                metric="schedule_variance", statistic="mean")
+    ddc = next(g for g in r["groups"] if g["managing_agency"] == "DDC")
+    assert ddc["value"] == 45.0            # ungated, the artifact drags this to ~−182k
+    assert r["excluded_artifacts"] == 1
+    assert "excluded" in r["label"]
+
+
+def test_schedule_breakdown_variance_no_artifacts_echoes_zero():
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    r = schedule_breakdown_from(con, group_by="managing_agency",
+                                metric="schedule_variance", statistic="mean")
+    assert r["excluded_artifacts"] == 0
+    assert "excluded" not in r["label"]    # no noise when nothing was dropped
+
+
 def test_schedule_changes_delayed_returns_pid_101():
     con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
     # 101 has no row at 202509 (absent then = not delayed) and +45 days at 202601

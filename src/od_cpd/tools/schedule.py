@@ -5,8 +5,8 @@ from ..config import CADENCE_MONTHS
 from ..dbio import rows_as_dicts
 from ..periods import is_cadence_period
 from ..provenance import provenance_block
-from ._common import (BOROUGH_GROUP_NOTE, CATEGORY_GROUP_NOTE, current_period,
-                      direction_of, interpolate_sql)
+from ._common import (BOROUGH_GROUP_NOTE, CATEGORY_GROUP_NOTE, VARIANCE_ARTIFACT_DAYS,
+                      current_period, direction_of, interpolate_sql)
 from .agency_scope import resolve_agency_scope
 
 _GROUPABLE = {"managing_agency", "sponsor_agency", "borough", "phase_norm",
@@ -36,12 +36,22 @@ def schedule_breakdown_from(con, group_by, metric="count", statistic="count",
         if "error" in scope:
             return scope
         where += f" AND {scope['where']}"
+    excluded_artifacts = None
     if metric == "count":
         agg = "count(*)"
     elif metric == "schedule_variance":
         agg = _VARIANCE_STATS.get(statistic)
         if agg is None:
             return {"error": f"statistic must be one of {sorted(_VARIANCE_STATS)}"}
+        # Forecast-placeholder artifacts (raw values like −364,938 days) corrupt
+        # day-valued aggregates — same guard as rank_projects, dropped rows counted.
+        excluded_artifacts = con.execute(
+            f"SELECT count(*) FROM schedule_history WHERE {where} "
+            f"AND variance_day IS NOT NULL "
+            f"AND variance_day NOT BETWEEN -{VARIANCE_ARTIFACT_DAYS} AND {VARIANCE_ARTIFACT_DAYS}",
+            params).fetchone()[0]
+        where += (f" AND variance_day BETWEEN -{VARIANCE_ARTIFACT_DAYS} "
+                  f"AND {VARIANCE_ARTIFACT_DAYS}")
     else:
         return {"error": "metric must be 'count' or 'schedule_variance'"}
     if group_by == "sponsor_agency":
@@ -76,6 +86,11 @@ def schedule_breakdown_from(con, group_by, metric="count", statistic="count",
                   definition=f"{statistic} of {metric} by {group_by}",
                   scope={"period": p, "agency": agency, "agency_role": agency_role},
                   row_count=len(groups), reproduce_sql=interpolate_sql(sql, params))}
+    if excluded_artifacts is not None:
+        result["excluded_artifacts"] = excluded_artifacts
+        if excluded_artifacts:
+            result["label"] += (f" {excluded_artifacts} forecast-placeholder artifact(s) "
+                                f"(|variance| > {VARIANCE_ARTIFACT_DAYS} days) excluded.")
     if group_by == "borough":
         result["label"] += " " + BOROUGH_GROUP_NOTE
     elif group_by == "category":
