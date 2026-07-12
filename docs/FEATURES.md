@@ -5,7 +5,7 @@
 > and bump the "Last updated" date. This file is the canonical inventory of what
 > the server does and the rules it encodes.
 >
-> _Last updated: 2026-06-16_
+> _Last updated: 2026-07-12_
 
 The MCP serves NYC Capital Projects data (4 Socrata datasets) over a local DuckDB,
 with domain rules baked in so callers don't have to rediscover them.
@@ -39,7 +39,7 @@ with domain rules baked in so callers don't have to rediscover them.
 - `rank_projects` — rank schedules (PIDs) or budgets (FMS lines); supports a `category=` filter. `min_total_budget` / `max_total_budget` apply on both entities (schedule: `attributed_budget`; budget: `latest_budget`); `delayed_only` applies on both (schedule: latest variance > 0; budget: line funds a currently-delayed PID)
   Budget metric pair: `budget_variance` (last-period source-LAG delta) vs
   `cumulative_budget_change` (latest − original; original prefers the adopted amount).
-- `run_sql` — read-only SELECT against the DuckDB; `inline` / `csv` / `xlsx` export. Each export writes a fresh uniquely-named file under `exports/`. The read-only guard ignores string literals and comments (a literal `'%update%'` is fine); xlsx stringifies LIST/STRUCT cells. The docstring steers callers to the TYPED tables first and carries the two grain rules (budget comparisons key on `(managing_agency, fms_id)`; sponsor-scoped budget sums use the `fms_sponsor` semi-join, never a value-bearing join). Every inline result echoes `latest_reporting_period`, and adds a `period_basis_note` when the query counts an all-history dimension (`fms_location` / `fms_sponsor` / `lifetime_budget_variance`) — those have no `reporting_period` column, so a raw count spans all periods, not one
+- `run_sql` — read-only SELECT against the DuckDB; `inline` / `csv` / `xlsx` export. Each export writes a fresh uniquely-named file under `exports/`. All three modes enforce the same query timeout (`RUN_SQL_TIMEOUT_SECONDS`, 30s) — a runaway query is interrupted, not left to hang. The read-only guard ignores string literals and comments (a literal `'%update%'` is fine); xlsx stringifies LIST/STRUCT cells. The docstring steers callers to the TYPED tables first and carries the two grain rules (budget comparisons key on `(managing_agency, fms_id)`; sponsor-scoped budget sums use the `fms_sponsor` semi-join, never a value-bearing join). Every inline result echoes `latest_reporting_period`, and adds a `period_basis_note` when the query counts an all-history dimension (`fms_location` / `fms_sponsor` / `lifetime_budget_variance`) — those have no `reporting_period` column, so a raw count spans all periods, not one
 
 ## 2. Core model: PID vs FMS, and the many-to-many relationship
 

@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import re
-import threading
 
 import duckdb
 
 from ..config import RUN_SQL_ROW_CAP, RUN_SQL_TIMEOUT_SECONDS
+from ..dbio import interrupt_after
 from ..provenance import provenance_block
 
 # Defense-in-depth only. The AUTHORITATIVE write guard is the read-only DuckDB
@@ -42,13 +42,6 @@ def validate_select(query: str) -> str:
     return q
 
 
-def _interrupt_after(con: duckdb.DuckDBPyConnection, seconds: int) -> threading.Timer:
-    t = threading.Timer(seconds, con.interrupt)
-    t.daemon = True
-    t.start()
-    return t
-
-
 def _latest_period(con: duckdb.DuckDBPyConnection) -> str | None:
     """Latest published reporting period from `meta`, or None if unavailable."""
     try:
@@ -79,7 +72,7 @@ def run_sql_on(con: duckdb.DuckDBPyConnection, query: str, *,
                timeout: int = RUN_SQL_TIMEOUT_SECONDS) -> dict:
     """Execute a validated SELECT inline, capped at `row_cap` rows."""
     q = validate_select(query)
-    timer = _interrupt_after(con, timeout)
+    timer = interrupt_after(con, timeout)
     try:
         # newline before ')' so a query ending in a `--` comment can't swallow the wrap
         cur = con.execute(f"SELECT * FROM ({q}\n) AS _sub LIMIT {row_cap + 1}")

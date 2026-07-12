@@ -1,6 +1,7 @@
 # src/od_cpd/dbio.py
 from __future__ import annotations
 
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -16,6 +17,16 @@ class DBMissingError(RuntimeError):
 
 class SchemaStaleError(DBMissingError):
     """DB was built by an older schema than the running code expects."""
+
+
+def interrupt_after(con: duckdb.DuckDBPyConnection, seconds: int) -> threading.Timer:
+    """Arm a daemon timer that calls con.interrupt() after `seconds`, aborting any
+    query still running on `con`. Callers must cancel() the returned timer once the
+    query returns. Shared by the inline (tools.sql) and file-export (export) paths."""
+    t = threading.Timer(seconds, con.interrupt)
+    t.daemon = True
+    t.start()
+    return t
 
 
 def connect_readonly(path: Path | None = None) -> duckdb.DuckDBPyConnection:
