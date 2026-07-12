@@ -50,7 +50,7 @@ def rank_projects_from(con, entity, rank_by, n=10, direction="top",
             params.append(category)
         if scope is not None:
             where.append(scope["where"])
-        sql = (f"SELECT s.pid, s.managing_agency, s.attributed_budget, "
+        sql = (f"SELECT s.pid, s.agency_project_name, s.managing_agency, s.attributed_budget, "
                f"{metric_expr} AS metric FROM {src} WHERE " + " AND ".join(where) +
                f" ORDER BY metric {order} LIMIT {int(n)}")
         rows = rows_as_dicts(con, sql, params)
@@ -74,7 +74,9 @@ def rank_projects_from(con, entity, rank_by, n=10, direction="top",
             params.append(category)
         if scope is not None:
             where.append(scope["where"])
-        sql = (f"SELECT fms_id, managing_agency, {col} AS metric FROM lifetime_budget_variance "
+        sql = (f"SELECT fms_id, managing_agency, loc.fms_project_name, {col} AS metric "
+               f"FROM lifetime_budget_variance "
+               f"LEFT JOIN fms_location loc USING (fms_id, managing_agency) "
                f"WHERE " + " AND ".join(where) + f" ORDER BY metric {order} LIMIT {int(n)}")
         rows = rows_as_dicts(con, sql, params)
         for r in rows:

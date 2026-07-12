@@ -54,3 +54,19 @@ def test_rank_budgets_by_cumulative_change_uses_original():
     assert top["fms_id"] == "F"
     assert top["cumulative_budget_change"]["value"] == 300000.0
     assert top["cumulative_budget_change"]["direction"] == "increased"
+
+
+def test_rank_schedule_rows_carry_agency_project_name():
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    r = rank_projects_from(con, entity="schedule", rank_by="period_variance_days")
+    assert r["rows"][0]["agency_project_name"] == "Park A"
+
+
+def test_rank_budget_rows_carry_fms_project_name():
+    con = duckdb.connect(":memory:"); _raw(con)
+    con.execute("UPDATE raw_project_detail SET fms_project_name = 'FMS Park A' "
+                "WHERE fms_id = 'A'")
+    materialize.materialize_all(con)
+    r = rank_projects_from(con, entity="budget", rank_by="total_budget")
+    row_a = next(x for x in r["rows"] if x["fms_id"] == "A")
+    assert row_a["fms_project_name"] == "FMS Park A"
