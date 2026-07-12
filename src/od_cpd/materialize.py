@@ -4,7 +4,7 @@ from __future__ import annotations
 import duckdb
 
 from . import categories, data_dictionary
-from .config import CADENCE_MONTHS
+from .config import CADENCE_MONTHS, VARIANCE_ARTIFACT_DAYS
 
 
 def _cadence_filter(col: str = "p") -> str:
@@ -255,11 +255,13 @@ def build_analytics(con: duckdb.DuckDBPyConnection) -> None:
         FROM latest l LEFT JOIN nm USING (fms_id, managing_agency)
     """)
 
-    # cumulative_schedule_variance — per pid; guard NULL + absurd outliers.
-    con.execute("""
+    # cumulative_schedule_variance — per pid; guard NULL + absurd outliers
+    # (VARIANCE_ARTIFACT_DAYS — the same bound the tool layer uses).
+    con.execute(f"""
         CREATE OR REPLACE TABLE cumulative_schedule_variance AS
         SELECT pid,
-               sum(CASE WHEN variance_day BETWEEN -36500 AND 36500 THEN variance_day END)
+               sum(CASE WHEN variance_day BETWEEN -{VARIANCE_ARTIFACT_DAYS}
+                        AND {VARIANCE_ARTIFACT_DAYS} THEN variance_day END)
                    AS cumulative_variance_days,
                max_by(variance_day, reporting_period) AS period_variance_days,
                max_by(forecast_completion, reporting_period) AS latest_forecast_completion

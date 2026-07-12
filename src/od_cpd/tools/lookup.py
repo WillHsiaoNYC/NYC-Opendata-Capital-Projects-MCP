@@ -53,11 +53,14 @@ def dataset_info_from(con: duckdb.DuckDBPyConnection) -> dict:
     by_sid_source = {t.get("socrata_id"): _PERIOD_SOURCES[name]
                      for name, t in load_dictionary().items()
                      if name in _PERIOD_SOURCES}
+    period_cache: dict[str, list] = {}  # fb86 + 95tx share schedule_history: scan once
     for d in datasets:
         src = by_sid_source.get(d["dataset_id"])
         if src and _table_exists(con, src[0]):
-            d["available_periods"] = [r[0] for r in con.execute(
-                f"SELECT DISTINCT reporting_period FROM {src[0]} ORDER BY 1").fetchall()]
+            if src[0] not in period_cache:
+                period_cache[src[0]] = [r[0] for r in con.execute(
+                    f"SELECT DISTINCT reporting_period FROM {src[0]} ORDER BY 1").fetchall()]
+            d["available_periods"] = period_cache[src[0]]
             if src[1]:
                 d["period_note"] = src[1]
     caveats = [

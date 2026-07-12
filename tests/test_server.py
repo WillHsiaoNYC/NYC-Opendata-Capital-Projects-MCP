@@ -5,6 +5,7 @@ import duckdb
 from od_cpd import materialize, server
 from od_cpd.primer import PRIMER
 from od_cpd.server import mcp
+from od_cpd.table_catalog import INTERNAL_TABLES
 from tests.test_materialize_normalized import _raw
 
 
@@ -34,9 +35,8 @@ def test_run_sql_docstring_covers_all_materialized_tables():
     con = duckdb.connect(":memory:"); _raw(con)
     materialize.materialize_all(con)
     tables = {r[0] for r in con.execute("SHOW TABLES").fetchall()}
-    internal = {"column_dict"}  # surfaced via describe_field, not raw-SQL guidance
     doc = server.run_sql.__doc__ or ""
-    missing = sorted(t for t in tables - internal if t not in doc)
+    missing = sorted(t for t in tables - INTERNAL_TABLES if t not in doc)
     assert not missing, f"tables absent from run_sql docstring: {missing}"
 
 

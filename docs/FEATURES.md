@@ -17,7 +17,7 @@ with domain rules baked in so callers don't have to rediscover them.
 - `list_agencies` — agency dictionary (from `agencies.yaml`) + live CPD presence + schedule-executor flag
 - `list_categories` — program/facility categories with budget-line counts & totals
 - `describe_field` — official field definitions (description, allowed values, primary/foreign key, limitations, notes), filterable by field and/or dataset (both filters are case-insensitive SUBSTRING matches)
-- `describe_table` — schema catalog for every queryable DuckDB table (typed analytics tables, dims, raw mirrors): live columns/types from `information_schema` + curated grain/keying notes from `data/tables.yaml` (drift-guarded against the built DB). No arg → catalog; `table=` (case-insensitive) → full detail; raw tables point to `describe_field` for field semantics
+- `describe_table` — schema catalog for every queryable DuckDB table (typed analytics tables, dims, raw mirrors, `meta`): live columns/types from `information_schema` + curated grain/keying notes from `data/tables.yaml` (drift-guarded against the built DB). No arg → catalog; `table=` (case-insensitive) → full detail; raw tables point to `describe_field` for field semantics
 
 **Resolution & detail**
 - `resolve_project_reference` — any PID / FMS ID / name / partial → schedule + budget matches, bucketed. `matched_field` is computed per row (`pid` / `fms_id` / name / description); LIKE wildcards in the query (`%`, `_`) match literally

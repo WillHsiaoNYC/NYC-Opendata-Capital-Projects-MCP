@@ -10,6 +10,7 @@ schema.RAW_COLUMNS) — that signal is the per-ingest column hash (meta.column_h
 """
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
 import duckdb
@@ -20,6 +21,7 @@ from .config import data_dir
 _FIELDS = ("display", "description", "key", "allowed_values", "limitations", "notes")
 
 
+@lru_cache(maxsize=2)  # static curated file; mirrors table_catalog.load_table_catalog
 def load_dictionary(*, yaml_path: Path | None = None) -> dict:
     """Parse data_dictionary.yaml → {table: {dataset, socrata_id, columns: {field: {...}}}}."""
     yaml_path = yaml_path or (data_dir() / "data_dictionary.yaml")
