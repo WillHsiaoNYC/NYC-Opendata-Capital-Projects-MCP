@@ -44,8 +44,20 @@ def resolve_from(con: duckdb.DuckDBPyConnection, query: str) -> dict:
         "budget_matches": budget_matches,        # FMS lines (route budget questions here)
         "note": ("A name can fan out on the PID axis, the FMS axis, or both. "
                  "Route by question domain; list all."),
-        "provenance": provenance_block(
-            definition="name/id match across agency_project_name, description, fms_project_name",
-            scope={"query": query}, row_count=len(schedule_matches) + len(budget_matches),
-            reproduce_sql=interpolate_sql(sched_sql, sched_params)),
+        # Per-bucket provenance: the two buckets come from independent queries against
+        # different tables/grains, so each carries its OWN self-contained (single-
+        # statement) reproduce_sql whose row_count covers that bucket alone. A single
+        # combined block would report a summed row_count that neither query reproduces —
+        # an FMS-only hit would then show a nonzero count against a schedule-only
+        # reproduce_sql that returns nothing.
+        "provenance": {
+            "schedule": provenance_block(
+                definition="PID/name match across agency_project_name, agency_project_description",
+                scope={"query": query}, row_count=len(schedule_matches),
+                reproduce_sql=interpolate_sql(sched_sql, sched_params)),
+            "budget": provenance_block(
+                definition="FMS-id/name match across fms_project_name",
+                scope={"query": query}, row_count=len(budget_matches),
+                reproduce_sql=interpolate_sql(budget_sql, budget_params)),
+        },
     }
