@@ -1,7 +1,7 @@
 # src/od_cpd/tools/_common.py
 from __future__ import annotations
 
-from ..config import CADENCE_MONTHS
+from ..config import CADENCE_MONTHS, VARIANCE_ARTIFACT_DAYS  # noqa: F401 — re-exported
 from ..dbio import sql_literal
 from ..periods import is_cadence_period, resolve_current_period
 
@@ -36,12 +36,8 @@ def escape_like(s: str) -> str:
 LIKE_ESC = "LIKE ? ESCAPE '\\'"
 ILIKE_ESC = "ILIKE ? ESCAPE '\\'"
 
-# Forecast-placeholder artifacts: a few raw snapshots diff a placeholder date
-# against a real one, yielding variance values like −364,938 days. 100 years is
-# far beyond any real schedule move — day-valued stats exclude anything outside
-# ±this bound (shared by rank_projects and schedule_breakdown so the two can't
-# disagree on what counts as real).
-VARIANCE_ARTIFACT_DAYS = 36500
+# VARIANCE_ARTIFACT_DAYS (re-exported above) is defined in config.py — one
+# definition shared with materialize.py's cumulative guard; rationale lives there.
 
 # One caption for every tool that groups by borough, so the derivation rule reads
 # identically everywhere (borough is line-keyed; the PID scalar is derived).

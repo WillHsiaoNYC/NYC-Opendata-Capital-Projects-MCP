@@ -32,6 +32,14 @@ FULL_PERIOD_MIN_FRACTION = 0.5
 RUN_SQL_ROW_CAP = 100        # inline rows before switching to a file
 RUN_SQL_TIMEOUT_SECONDS = 30
 
+# Forecast-placeholder artifacts: a few raw snapshots diff a placeholder date
+# against a real one, yielding variance values like −364,938 days. 100 years is
+# far beyond any real schedule move — day-valued stats exclude anything outside
+# ±this bound. ONE definition for both layers: materialize.py's cumulative guard
+# and the tool guards (rank_projects / schedule_breakdown / get_project_history,
+# via the tools/_common re-export) — so they can't disagree on what counts as real.
+VARIANCE_ARTIFACT_DAYS = 36500
+
 # Socrata download pagination
 PAGE_SIZE = 50000
 

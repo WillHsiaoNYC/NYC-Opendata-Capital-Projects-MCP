@@ -1,9 +1,9 @@
 # Curated catalog of every user-queryable table in the CPD DuckDB.
 # Static — edit THIS file, not Python (same pattern as data_dictionary.yaml).
 # kind: analytics (built by materialize.py) | dimension (curated YAML → table)
-#       | raw (Socrata mirror, all VARCHAR).
+#       | raw (Socrata mirror, all VARCHAR) | metadata (ingest bookkeeping).
 # tests/test_table_catalog.py asserts this catalog matches a freshly built DB
-# exactly (internal tables meta/column_dict excluded).
+# exactly (internal tables — table_catalog.INTERNAL_TABLES — excluded).
 
 raw_project_detail:
   kind: raw
@@ -169,3 +169,11 @@ category_dim:
   description: >-
     Curated category assignment per budget line (categories.yaml: ten-year plan
     keyword / sponsor routing / fms-id prefix precedence).
+
+meta:
+  kind: metadata
+  grain: one row per dataset_id
+  description: >-
+    Per-dataset ingest metadata: latest_reporting_period (publish-fullness
+    guarded), row counts, source data dates, ingest timestamps. Every run_sql
+    result echoes latest_reporting_period from here.

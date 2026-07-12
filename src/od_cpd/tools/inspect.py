@@ -19,6 +19,12 @@ def _current_links(con: duckdb.DuckDBPyConnection, *, where: str, params: list,
         f"WHERE {where} QUALIFY reporting_period = max(reporting_period) OVER ()", params)
 
 
+def _fms_line_filter(fms_id: str, managing_agency: str | None) -> tuple[str, list]:
+    # lower(): FMS ids are stored uppercase but users type them as resolve accepted them.
+    where = "lower(fms_id) = lower(?)" + (" AND managing_agency = ?" if managing_agency else "")
+    return where, [fms_id] + ([managing_agency] if managing_agency else [])
+
+
 def get_project_schedule_from(con: duckdb.DuckDBPyConnection, pid: str) -> dict:
     state = rows_as_dicts(con, "SELECT * FROM latest_project_state WHERE pid = ?", [pid])
     if not state:
@@ -47,9 +53,7 @@ def get_project_schedule_from(con: duckdb.DuckDBPyConnection, pid: str) -> dict:
 
 def get_project_budget_from(con: duckdb.DuckDBPyConnection, fms_id: str,
                             managing_agency: str | None = None) -> dict:
-    # lower(): FMS ids are stored uppercase but users type them as resolve accepted them.
-    where = "lower(fms_id) = lower(?)" + (" AND managing_agency = ?" if managing_agency else "")
-    params = [fms_id] + ([managing_agency] if managing_agency else [])
+    where, params = _fms_line_filter(fms_id, managing_agency)
     bud = rows_as_dicts(con, f"SELECT * FROM lifetime_budget_variance WHERE {where}", params)
     if not bud:
         return {"error": f"No budget (FMS line) found for {fms_id}"}
@@ -115,9 +119,7 @@ def _schedule_history_answer(con: duckdb.DuckDBPyConnection, pid: str) -> dict:
 
 def _budget_history_answer(con: duckdb.DuckDBPyConnection, fms_id: str,
                            managing_agency: str | None) -> dict:
-    # lower(): FMS ids are stored uppercase but users type them as resolve accepted them.
-    where = "lower(fms_id) = lower(?)" + (" AND managing_agency = ?" if managing_agency else "")
-    params = [fms_id] + ([managing_agency] if managing_agency else [])
+    where, params = _fms_line_filter(fms_id, managing_agency)
     sql = (f"SELECT fms_id, managing_agency, reporting_period, total_budget, "
            f"spend_to_date, spend_pct, budget_variance, budget_variance_pct "
            f"FROM budget_history WHERE {where} ORDER BY managing_agency, reporting_period")
@@ -134,17 +136,15 @@ def _budget_history_answer(con: duckdb.DuckDBPyConnection, fms_id: str,
              for r in rows_as_dicts(con,
                  f"SELECT fms_id, managing_agency, fms_project_name "
                  f"FROM fms_location WHERE {where}", params)}
-    keys: list[tuple] = []
-    for r in snap + orig:
-        k = (r["fms_id"], r["managing_agency"])
-        if k not in keys:
-            keys.append(k)
+    snap_by_line: dict[tuple, list] = {}
+    for r in snap:
+        snap_by_line.setdefault((r["fms_id"], r["managing_agency"]), []).append(r)
+    # first-seen order: snapshot lines first, then adoption-only lines
+    keys = list(dict.fromkeys([*snap_by_line, *orig_by_line]))
     lines = []
     for k in keys:
         periods = []
-        for r in snap:
-            if (r["fms_id"], r["managing_agency"]) != k:
-                continue
+        for r in snap_by_line.get(k, []):
             p = dict(r)
             p.pop("fms_id"); p.pop("managing_agency")
             p["budget_variance"] = signed_metric(p["budget_variance"], "budget")
