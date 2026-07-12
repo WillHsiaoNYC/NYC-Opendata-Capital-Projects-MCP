@@ -50,3 +50,58 @@ def test_schedule_answer_carries_borough_and_list():
     r = get_project_schedule_from(con, "401")
     assert r["answer"]["borough"] == "Multiple"
     assert r["answer"]["boroughs"] == ["Bronx", "Brooklyn"]
+
+
+from od_cpd.tools.inspect import get_project_history_from
+
+
+def _history_con():
+    con = duckdb.connect(":memory:"); _raw(con)
+    # a second, earlier period for PID 101 so history has a trajectory
+    con.execute(
+        "INSERT INTO raw_project_detail (reporting_period, managing_agency, sponsor_agency,"
+        " pid, fms_id, total_budget, current_phase, borough, agency_project_name) "
+        "VALUES ('202509','DDC','DDC','101','A','90','Design','K','Park A')")
+    con.execute(
+        "INSERT INTO raw_schedule_history (reporting_period, managing_agency, pid,"
+        " current_phase, completion_date, completion_date_type, variance_day) "
+        "VALUES ('202509','DDC','101','Design','2026-11-01','Forecast','-10')")
+    materialize.materialize_all(con)
+    return con
+
+
+def test_history_pid_period_by_period():
+    r = get_project_history_from(_history_con(), pid="101")
+    assert [p["reporting_period"] for p in r["periods"]] == ["202509", "202601"]
+    assert r["periods"][0]["variance_days"] == {"value": -10, "direction": "earlier"}
+    assert r["periods"][1]["variance_days"] == {"value": 45, "direction": "later"}
+    assert r["current_state"]["reporting_period"] == "202601"
+    assert r["current_state"]["cumulative_variance_days"]["value"] == 35
+    assert r["anchor"] == {"type": "schedule", "id": "101"}
+    assert len(r["linked_budgets"]) == 2          # A and B at the latest link period
+
+
+def test_history_pid_artifact_rows_kept_and_marked():
+    con = duckdb.connect(":memory:"); _raw(con)
+    con.execute(
+        "INSERT INTO raw_project_detail (reporting_period, managing_agency, sponsor_agency,"
+        " pid, fms_id, total_budget, current_phase, borough) "
+        "VALUES ('202601','DDC','DDC','777','G','10','Design','K')")
+    con.execute(
+        "INSERT INTO raw_schedule_history (reporting_period, managing_agency, pid,"
+        " current_phase, completion_date, completion_date_type, variance_day) "
+        "VALUES ('202601','DDC','777','Design','2028-01-01','Forecast','-364938')")
+    materialize.materialize_all(con)
+    r = get_project_history_from(con, pid="777")
+    assert len(r["periods"]) == 1                  # kept, not dropped
+    assert r["periods"][0]["variance_artifact"] is True
+
+
+def test_history_requires_exactly_one_anchor():
+    con = _history_con()
+    assert "error" in get_project_history_from(con)
+    assert "error" in get_project_history_from(con, pid="101", fms_id="A")
+
+
+def test_history_unknown_pid_errors():
+    assert "error" in get_project_history_from(_history_con(), pid="999")
