@@ -140,3 +140,11 @@ def test_budget_change_agency_missing_period_no_fabricated_delta():
     assert r["from_value"] is None
     assert r["change"]["value"] is None
     assert r["change"]["direction"] is None
+
+
+def test_budget_options_validate_without_an_agency_filter():
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    assert "error" in budget_breakdown_from(con, agency_role="invalid")
+    assert "error" in budget_change_from(con, "fms:A", "202509", "202601", agency_role="invalid")
+    for period in ("bad-period", "202602"):
+        assert "error" in budget_change_from(con, "fms:A", period, "202601")

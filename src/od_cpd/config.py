@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from importlib.resources import files
+from importlib.resources.abc import Traversable
 from pathlib import Path
 
 SOCRATA_DOMAIN = "data.cityofnewyork.us"
@@ -71,6 +73,15 @@ def app_token() -> str | None:
     return os.environ.get("OD_CPD_SOCRATA_APP_TOKEN")
 
 
-def data_dir() -> Path:
-    """Tracked source dictionaries (agencies.yaml, categories.yaml, data_dictionary.yaml)."""
-    return Path(__file__).resolve().parents[2] / "data"
+def data_dir() -> Traversable:
+    """Curated resources from the source checkout or the installed package.
+
+    Editable checkouts keep data/*.yaml authoritative; wheels bundle the same
+    files under od_cpd/data. Callers read resources directly without assuming a
+    filesystem path, so package resources can also be supplied by a zip loader.
+    """
+    package = Path(__file__).resolve().parent
+    checkout = package.parent.parent
+    if package.parent.name == "src" and (checkout / "pyproject.toml").is_file():
+        return checkout / "data"
+    return files("od_cpd").joinpath("data")

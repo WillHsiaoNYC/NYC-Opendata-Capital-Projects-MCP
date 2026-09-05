@@ -1,10 +1,11 @@
 # src/od_cpd/tools/portfolio.py
 from __future__ import annotations
 
-from ..dbio import rows_as_dicts
+from ..dbio import rows_as_dicts, sql_literal
 from ..provenance import provenance_block
-from ._common import (CATEGORY_GROUP_NOTE, category_pid_filter, interpolate_sql,
-                      signed_metric)
+from ._common import (CATEGORY_GROUP_NOTE, budget_state_sql, category_pid_filter,
+                      current_period, interpolate_sql, schedule_state_sql, signed_metric,
+                      snapshot_presence_sql, validate_choice, validate_int)
 from .agency_scope import resolve_agency_scope
 
 _LIFECYCLES = {"in_progress", "completed", "cancelled"}
@@ -20,7 +21,7 @@ _BASES_NOTE = (
 
 def project_portfolio_from(con, category=None, borough=None, community_board=None,
                            lifecycle_status=None, agency=None, agency_role="auto",
-                           n=50):
+                           n=50, population_scope="latest_known", category_scope="current"):
     """PID-grain cross-section: filter, then list by nearest completion (NULLs last).
 
     Summary aggregates cover the FULL filtered set, not just the returned rows.
@@ -29,27 +30,34 @@ def project_portfolio_from(con, category=None, borough=None, community_board=Non
     """
     if lifecycle_status is not None and lifecycle_status not in _LIFECYCLES:
         return {"error": f"lifecycle_status must be one of {sorted(_LIFECYCLES)}"}
-    n = max(1, min(int(n), _ROW_CAP))
+    error = (validate_choice(population_scope, {"latest_known", "current"}, "population_scope")
+             or validate_choice(category_scope, {"current", "all_history"}, "category_scope")
+             or validate_choice(agency_role, {"auto", "sponsor", "managing"}, "agency_role")
+             or validate_int(n, "n", maximum=_ROW_CAP))
+    if error:
+        return error
+    period = current_period(con, "schedule_history")
+    state_sql = schedule_state_sql(population_scope, period)
+    presence = snapshot_presence_sql("schedule", period)
     where, params = [], []
     if category is not None:
-        where.append(category_pid_filter("s"))
+        where.append(category_pid_filter("s", category_scope))
         params.append(category)
     if borough is not None:
         where.append("(list_contains(s.boroughs, ?) OR s.borough = ?)")
         params += [borough, borough]
     if community_board is not None:
-        # Match only the PID's CURRENT (latest link-period) funding lines:
-        # schedule_budget_link is all-history, so a line dropped in an earlier
-        # period must not resurrect the PID (mirrors inspect.py's link rule).
-        # QUALIFY the latest period in an inner subquery with NO CB predicate —
-        # applying WHERE community_board first would compute max(period) over only
-        # CB-matching rows and let stale matches survive.
-        where.append("s.pid IN (SELECT cur.pid FROM ("
-                     "SELECT l.pid, l.fms_id, l.managing_agency "
-                     "FROM schedule_budget_link l "
-                     "QUALIFY l.reporting_period = "
-                     "max(l.reporting_period) OVER (PARTITION BY l.pid)) cur "
-                     "JOIN fms_location fl USING (fms_id, managing_agency) "
+        # Reuse the selected state's current funding, never historical matches.
+        location = "SELECT * FROM fms_location"
+        if population_scope == "current":
+            location = ("SELECT fms_id, managing_agency, community_board FROM raw_project_detail "
+                        f"WHERE reporting_period <= {sql_literal(period)} "
+                        "AND right(reporting_period, 2) IN ('01', '05', '09') "
+                        "QUALIFY row_number() OVER (PARTITION BY fms_id, managing_agency "
+                        "ORDER BY reporting_period DESC, community_board NULLS LAST) = 1")
+        where.append("EXISTS (SELECT 1 FROM unnest(s.linked_budgets) AS _l(b) "
+                     f"JOIN ({location}) fl ON b.fms_id = fl.fms_id "
+                     "AND b.managing_agency = fl.managing_agency "
                      "WHERE fl.community_board = ?)")
         params.append(community_board)
     if lifecycle_status is not None:
@@ -67,33 +75,36 @@ def project_portfolio_from(con, category=None, borough=None, community_board=Non
         f"SELECT s.pid, s.agency_project_name, s.managing_agency, s.sponsor_agency, "
         f"s.borough, s.boroughs, s.lifecycle_status, s.current_phase, "
         f"s.completion_date, s.completion_date_type, s.period_variance_days, "
-        f"s.forecast_past_due, s.attributed_budget "
-        f"FROM latest_project_state s "
+        f"s.forecast_past_due, s.attributed_budget, s.reporting_period, "
+        f"{presence} AS present_in_current_snapshot "
+        f"FROM ({state_sql}) s "
         f"WHERE {cond} "
         f"ORDER BY s.completion_date IS NULL, s.completion_date, s.pid LIMIT {n}")
     rows = rows_as_dicts(con, row_sql, params)
     for r in rows:
         r["period_variance_days"] = signed_metric(r["period_variance_days"])
 
-    summary = rows_as_dicts(con, f"""
+    summary_sql = f"""
         SELECT count(*) AS n_projects,
                sum(s.attributed_budget) AS attributed_budget_total,
                count(*) FILTER (WHERE s.completion_date IS NOT NULL)
                    AS n_with_completion_date,
                count(*) FILTER (WHERE s.period_variance_days > 0)
                    AS n_delayed_this_period
-        FROM latest_project_state s WHERE {cond}""", params)[0]
+        FROM ({state_sql}) s WHERE {cond}"""
+    summary = rows_as_dicts(con, summary_sql, params)[0]
     # Dedup the filtered set's funding lines before totaling — a line shared by
     # several matching PIDs must count once here (the per-row attribution above
     # is the count-in-each view; this is the cash view).
-    summary["line_budget_total"] = con.execute(f"""
-        SELECT sum(v.latest_budget) FROM lifetime_budget_variance v
+    line_sql = f"""
+        SELECT sum(v.latest_budget) AS line_budget_total
+        FROM ({budget_state_sql(population_scope, period)}) v
         JOIN (SELECT DISTINCT b.fms_id, b.managing_agency
-              FROM latest_project_state s
+              FROM ({state_sql}) s
               CROSS JOIN unnest(s.linked_budgets) AS _l(b)
               WHERE {cond}) d
-          ON v.fms_id = d.fms_id AND v.managing_agency = d.managing_agency""",
-        params).fetchone()[0]
+          ON v.fms_id = d.fms_id AND v.managing_agency = d.managing_agency"""
+    summary["line_budget_total"] = con.execute(line_sql, params).fetchone()[0]
 
     notes = [_BASES_NOTE,
              "Row order is fixed to nearest completion; for largest/most-delayed "
@@ -102,16 +113,23 @@ def project_portfolio_from(con, category=None, borough=None, community_board=Non
         notes.append(CATEGORY_GROUP_NOTE)
     result = {
         "rows": rows,
+        "population_scope": population_scope, "current_period": period,
+        "category_scope": category_scope,
         "truncated": summary["n_projects"] > len(rows),
         "summary": summary,
         "notes": notes,
         "provenance": provenance_block(
-            definition="portfolio cross-section (latest state per PID)",
+            definition=f"portfolio cross-section ({population_scope})",
             scope={"category": category, "borough": borough,
                    "community_board": community_board,
                    "lifecycle_status": lifecycle_status,
-                   "agency": agency, "agency_role": agency_role, "n": n},
-            row_count=len(rows), reproduce_sql=interpolate_sql(row_sql, params)),
+                   "agency": agency, "agency_role": agency_role, "n": n,
+                   "population_scope": population_scope, "current_period": period,
+                   "category_scope": category_scope},
+            row_count=len(rows), reproduce_sql=interpolate_sql(row_sql, params),
+            components={"rows": interpolate_sql(row_sql, params),
+                        "summary": interpolate_sql(summary_sql, params),
+                        "line_budget_total": interpolate_sql(line_sql, params)}),
     }
     if scope is not None:
         result["agency_scope"] = scope["agency_scope"]

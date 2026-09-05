@@ -3,6 +3,7 @@ import csv
 import io
 
 import httpx
+import pytest
 
 from od_cpd import socrata
 
@@ -79,3 +80,43 @@ def test_download_csv_counts_records_not_physical_lines(tmp_path):
         parsed = list(csv.reader(fh))
     assert parsed[0] == ["a", "b"]        # header
     assert len(parsed) - 1 == 3           # 3 data records
+
+
+@pytest.mark.parametrize("second", ["b,a\n3,4\n", "a,c\n3,4\n", "", "a,b\n3,4,5\n"])
+def test_download_rejects_later_page_before_appending(tmp_path, second):
+    pages = iter(["a,b\n1,2\n", second])
+    out = tmp_path / "source.csv"
+    with _client(lambda request: httpx.Response(200, text=next(pages))) as client:
+        with pytest.raises(ValueError):
+            socrata.download_csv("fb86-vt7u", out, page_size=1, client=client,
+                                 expected_header=["a", "b"])
+    assert out.read_text() == "a,b\n1,2\n"
+
+
+def test_download_checks_first_header_against_expected_columns(tmp_path):
+    out = tmp_path / "source.csv"
+    with _client(lambda request: httpx.Response(200, text='"b","a"\n1,2\n')) as client:
+        with pytest.raises(ValueError, match="header changed"):
+            socrata.download_csv("fb86-vt7u", out, client=client, expected_header=["a", "b"])
+    assert out.read_bytes() == b""
+
+
+def test_fetch_count_and_snapshot_periods():
+    def handler(request):
+        if request.url.params.get("$group"):
+            assert request.url.params["$where"] == "spend_to_date IS NOT NULL"
+            return httpx.Response(200, json=[{"year_month_reported": "202601", "row_count": "4"}])
+        assert request.url.params["$select"] == "count(*) AS row_count"
+        return httpx.Response(200, json=[{"row_count": "5"}])
+    with _client(handler) as client:
+        assert socrata.fetch_row_count("qj5n-h5qp", client=client) == 5
+        assert socrata.fetch_period_counts("qj5n-h5qp", client=client) == {"202601": 4}
+
+
+def test_download_keeps_page_records_separate_without_final_newline(tmp_path):
+    pages = iter(["a,b\n1,2", "a,b\n3,4", "a,b\n"])
+    out = tmp_path / "source.csv"
+    with _client(lambda request: httpx.Response(200, text=next(pages))) as client:
+        assert socrata.download_csv("fb86-vt7u", out, page_size=1, client=client) == 2
+    with out.open(newline="") as stream:
+        assert list(csv.reader(stream)) == [["a", "b"], ["1", "2"], ["3", "4"]]

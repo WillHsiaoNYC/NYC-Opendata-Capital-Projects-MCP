@@ -32,3 +32,23 @@ def test_schema_check_tolerates_missing_meta():
 def test_schema_stale_error_is_db_missing_subclass():
     # so server._with_conn's `except DBMissingError` returns a clean error dict
     assert issubclass(dbio.SchemaStaleError, dbio.DBMissingError)
+
+
+def test_readonly_connection_locks_external_access_off(tmp_path):
+    path = tmp_path / "query.duckdb"
+    with duckdb.connect(str(path)) as con:
+        con.execute("CREATE TABLE t AS SELECT 1 AS n")
+
+    with dbio.connect_readonly(path) as con:
+        assert con.execute("SELECT n FROM t").fetchall() == [(1,)]
+        for setting, expected in (
+            ("enable_external_access", False),
+            ("autoinstall_known_extensions", False),
+            ("autoload_known_extensions", False),
+            ("lock_configuration", True),
+        ):
+            assert con.execute("SELECT current_setting(?)", [setting]).fetchone() == (expected,)
+            with pytest.raises(duckdb.InvalidInputException, match="locked"):
+                con.execute(f"SET {setting} = {'false' if expected else 'true'}")
+        with pytest.raises(duckdb.Error, match="read-only"):
+            con.execute("INSERT INTO t VALUES (2)")

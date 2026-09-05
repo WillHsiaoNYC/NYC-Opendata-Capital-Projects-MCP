@@ -2,21 +2,24 @@
 from __future__ import annotations
 
 import duckdb
+from ..coverage import attach_schedule_coverage
 from ..dbio import rows_as_dicts
 from ..provenance import provenance_block
-from ._common import interpolate_sql, mm_envelope, signed_metric, VARIANCE_ARTIFACT_DAYS
+from ._common import (current_pid_links_sql, interpolate_sql, mm_envelope,
+                      signed_metric, VARIANCE_ARTIFACT_DAYS)
 
 
-def _current_links(con: duckdb.DuckDBPyConnection, *, where: str, params: list,
-                   select: str) -> list[dict]:
+def _current_links_sql(*, where: str, select: str, anchor_type: str) -> str:
     # A project's CURRENT counterparts are the link edges at the link table's OWN latest
     # period. A PID's latest schedule_history snapshot can fall in a period where its fb86
     # row had a null fms_id (no edge), which would wrongly yield zero linked budgets — the
     # link table's max period always has fms_id. The budget side mirrors this: all-history
     # links would resurrect PIDs the line no longer funds.
-    return rows_as_dicts(con,
-        f"SELECT DISTINCT {select} FROM schedule_budget_link "
-        f"WHERE {where} QUALIFY reporting_period = max(reporting_period) OVER ()", params)
+    if anchor_type == "schedule":
+        return f"SELECT DISTINCT {select} FROM ({current_pid_links_sql()}) WHERE {where}"
+    return (f"SELECT DISTINCT {select} FROM schedule_budget_link WHERE {where} "
+            "QUALIFY reporting_period = max(reporting_period) "
+            "OVER (PARTITION BY fms_id, managing_agency)")
 
 
 def _fms_line_filter(fms_id: str, managing_agency: str | None) -> tuple[str, list]:
@@ -26,14 +29,17 @@ def _fms_line_filter(fms_id: str, managing_agency: str | None) -> tuple[str, lis
 
 
 def get_project_schedule_from(con: duckdb.DuckDBPyConnection, pid: str) -> dict:
-    state = rows_as_dicts(con, "SELECT * FROM latest_project_state WHERE pid = ?", [pid])
+    state_sql = "SELECT * FROM latest_project_state WHERE pid = ?"
+    state = rows_as_dicts(con, state_sql, [pid])
     if not state:
-        return {"error": f"No schedule (PID) found for {pid}"}
+        return attach_schedule_coverage(con, {"error": f"No schedule (PID) found for {pid}"}, pid=pid)
     s = state[0]
-    linked = _current_links(con, where="pid = ?", params=[pid],
-                            select="fms_id, managing_agency")
+    link_sql = _current_links_sql(where="pid = ?", select="fms_id, managing_agency",
+                                  anchor_type="schedule")
+    linked = rows_as_dicts(con, link_sql, [pid])
     answer = {
         "pid": pid, "agency": s["managing_agency"], "sponsor_agency": s["sponsor_agency"],
+        "reporting_period": s["reporting_period"],
         "borough": s["borough"], "boroughs": s["boroughs"],
         "phase": s["current_phase"],
         "lifecycle_status": s["lifecycle_status"],
@@ -44,28 +50,33 @@ def get_project_schedule_from(con: duckdb.DuckDBPyConnection, pid: str) -> dict:
         "attributed_budget": s["attributed_budget"],
     }
     env = mm_envelope(anchor_type="schedule", anchor_id=pid, linked=linked)
-    return {"answer": answer, **env,
+    result = {"answer": answer, **env,
             "provenance": provenance_block(
                 definition="latest_project_state row for PID", scope={"pid": pid},
-                row_count=1, reproduce_sql=interpolate_sql(
-                    "SELECT * FROM latest_project_state WHERE pid = ?", [pid]))}
+                row_count=1, reproduce_sql=interpolate_sql(state_sql, [pid]),
+                components={"current_state": interpolate_sql(state_sql, [pid]),
+                            "linked_budgets": interpolate_sql(link_sql, [pid])})}
+    return attach_schedule_coverage(con, result, pid=pid)
 
 
 def get_project_budget_from(con: duckdb.DuckDBPyConnection, fms_id: str,
                             managing_agency: str | None = None) -> dict:
     where, params = _fms_line_filter(fms_id, managing_agency)
-    bud = rows_as_dicts(con, f"SELECT * FROM lifetime_budget_variance WHERE {where}", params)
+    budget_sql = f"SELECT * FROM lifetime_budget_variance WHERE {where}"
+    bud = rows_as_dicts(con, budget_sql, params)
     if not bud:
         return {"error": f"No budget (FMS line) found for {fms_id}"}
-    linked = _current_links(con, where=where, params=params,
-                            select="pid, managing_agency")
+    link_sql = _current_links_sql(where=where, select="pid, managing_agency",
+                                  anchor_type="budget")
+    linked = rows_as_dicts(con, link_sql, params)
     env = mm_envelope(anchor_type="budget", anchor_id=fms_id, linked=linked)
     return {"answer": bud, **env,
             "provenance": provenance_block(
                 definition="lifetime_budget_variance row(s) for FMS line",
                 scope={"fms_id": fms_id, "managing_agency": managing_agency},
-                row_count=len(bud), reproduce_sql=interpolate_sql(
-                    f"SELECT * FROM lifetime_budget_variance WHERE {where}", params))}
+                row_count=len(bud), reproduce_sql=interpolate_sql(budget_sql, params),
+                components={"budget_lines": interpolate_sql(budget_sql, params),
+                            "linked_schedules": interpolate_sql(link_sql, params)})}
 
 
 def get_project_history_from(con: duckdb.DuckDBPyConnection, pid: str | None = None,
@@ -75,8 +86,10 @@ def get_project_history_from(con: duckdb.DuckDBPyConnection, pid: str | None = N
     lens (fms_id). Exactly one anchor id."""
     if (pid is None) == (fms_id is None):
         return {"error": "Provide exactly one of pid or fms_id."}
+    if pid is not None and managing_agency is not None:
+        return {"error": "managing_agency applies only to an FMS budget-line history."}
     if pid is not None:
-        return _schedule_history_answer(con, pid)
+        return attach_schedule_coverage(con, _schedule_history_answer(con, pid), pid=pid, history=True)
     return _budget_history_answer(con, fms_id, managing_agency)
 
 
@@ -96,25 +109,24 @@ def _schedule_history_answer(con: duckdb.DuckDBPyConnection, pid: str) -> dict:
             r["variance_artifact"] = True
         r["forecast_completion"] = (str(r["forecast_completion"])
                                     if r["forecast_completion"] else None)
-    cum = con.execute("SELECT cumulative_variance_days FROM cumulative_schedule_variance "
-                      "WHERE pid = ?", [pid]).fetchone()
-    last = rows[-1]
-    current_state = {"reporting_period": last["reporting_period"],
-                     "current_phase": last["current_phase"],
-                     "lifecycle_status": last["lifecycle_status"],
-                     "cumulative_variance_days": signed_metric(cum[0] if cum else None)}
-    lps = con.execute("SELECT forecast_past_due, agency_project_name "
-                      "FROM latest_project_state WHERE pid = ?", [pid]).fetchone()
-    current_state["forecast_past_due"] = bool(lps[0]) if lps else None
-    current_state["agency_project_name"] = lps[1] if lps else None
-    linked = _current_links(con, where="pid = ?", params=[pid],
-                            select="fms_id, managing_agency")
+    current_sql = ("SELECT s.reporting_period, s.current_phase, s.lifecycle_status, "
+                   "c.cumulative_variance_days, s.forecast_past_due, s.agency_project_name "
+                   "FROM latest_project_state s LEFT JOIN cumulative_schedule_variance c "
+                   "USING (pid) WHERE s.pid = ?")
+    current_state = rows_as_dicts(con, current_sql, [pid])[0]
+    current_state["cumulative_variance_days"] = signed_metric(current_state["cumulative_variance_days"])
+    link_sql = _current_links_sql(where="pid = ?", select="fms_id, managing_agency",
+                                  anchor_type="schedule")
+    linked = rows_as_dicts(con, link_sql, [pid])
     env = mm_envelope(anchor_type="schedule", anchor_id=pid, linked=linked)
     return {"current_state": current_state, "periods": rows, **env,
             "provenance": provenance_block(
                 definition="schedule_history rows for PID, period by period",
                 scope={"pid": pid}, row_count=len(rows),
-                reproduce_sql=interpolate_sql(sql, [pid]))}
+                reproduce_sql=interpolate_sql(sql, [pid]),
+                components={"periods": interpolate_sql(sql, [pid]),
+                            "current_state": interpolate_sql(current_sql, [pid]),
+                            "linked_budgets": interpolate_sql(link_sql, [pid])})}
 
 
 def _budget_history_answer(con: duckdb.DuckDBPyConnection, fms_id: str,
@@ -124,18 +136,18 @@ def _budget_history_answer(con: duckdb.DuckDBPyConnection, fms_id: str,
            f"spend_to_date, spend_pct, budget_variance, budget_variance_pct "
            f"FROM budget_history WHERE {where} ORDER BY managing_agency, reporting_period")
     snap = rows_as_dicts(con, sql, params)
-    orig = rows_as_dicts(con,
-        f"SELECT fms_id, managing_agency, recorded_period, original_budget "
-        f"FROM original_budget WHERE {where}", params)
+    original_sql = (f"SELECT fms_id, managing_agency, recorded_period, original_budget "
+                    f"FROM original_budget WHERE {where}")
+    orig = rows_as_dicts(con, original_sql, params)
     if not snap and not orig:
         return {"error": f"No budget (FMS line) found for {fms_id}"}
     orig_by_line = {(o["fms_id"], o["managing_agency"]): o for o in orig}
     # line-keyed FMS-system name (latest non-null; budget-only lines with no fb86 row
     # have no fms_location entry → None). One query covers every line for this id.
+    names_sql = (f"SELECT fms_id, managing_agency, fms_project_name "
+                 f"FROM fms_location WHERE {where}")
     names = {(r["fms_id"], r["managing_agency"]): r["fms_project_name"]
-             for r in rows_as_dicts(con,
-                 f"SELECT fms_id, managing_agency, fms_project_name "
-                 f"FROM fms_location WHERE {where}", params)}
+             for r in rows_as_dicts(con, names_sql, params)}
     snap_by_line: dict[tuple, list] = {}
     for r in snap:
         snap_by_line.setdefault((r["fms_id"], r["managing_agency"]), []).append(r)
@@ -161,15 +173,19 @@ def _budget_history_answer(con: duckdb.DuckDBPyConnection, fms_id: str,
             line["note"] = ("Adoption-only line: an original budget exists but no "
                             "reporting snapshot yet — normal for early allocations.")
         lines.append(line)
-    linked = _current_links(con, where=where, params=params,
-                            select="pid, managing_agency")
+    link_sql = _current_links_sql(where=where, select="pid, managing_agency", anchor_type="budget")
+    linked = rows_as_dicts(con, link_sql, params)
     env = mm_envelope(anchor_type="budget", anchor_id=fms_id, linked=linked)
     result = {"lines": lines, **env,
               "provenance": provenance_block(
                   definition="budget_history rows per line, period by period "
                              "(+ original_budget header)",
                   scope={"fms_id": fms_id, "managing_agency": managing_agency},
-                  row_count=len(snap), reproduce_sql=interpolate_sql(sql, params))}
+                  row_count=len(snap), reproduce_sql=interpolate_sql(sql, params),
+                  components={"periods": interpolate_sql(sql, params),
+                              "original_budget": interpolate_sql(original_sql, params),
+                              "line_names": interpolate_sql(names_sql, params),
+                              "linked_schedules": interpolate_sql(link_sql, params)})}
     if len(lines) > 1:
         result["grain_note"] = ("This FMS id is held by multiple managing agencies — "
                                 "each is a distinct budget line ((managing_agency, "

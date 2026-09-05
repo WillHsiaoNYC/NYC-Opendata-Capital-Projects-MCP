@@ -9,10 +9,9 @@ from ..config import RUN_SQL_ROW_CAP, RUN_SQL_TIMEOUT_SECONDS
 from ..dbio import interrupt_after
 from ..provenance import provenance_block
 
-# Defense-in-depth only. The AUTHORITATIVE write guard is the read-only DuckDB
-# connection (dbio.connect_readonly opens with read_only=True), which rejects any
-# mutation at the engine level. This keyword check just fails fast with a clear
-# message; the prefix check below already blocks non-SELECT/WITH statements.
+# Defense-in-depth only. dbio.connect_readonly prevents database writes and locks
+# external access and extension loading off at the engine level. This keyword
+# check just fails fast with a clear message; it is not the data-access boundary.
 _FORBIDDEN = re.compile(
     r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|ATTACH|DETACH|PRAGMA|COPY|"
     r"INSTALL|LOAD|SET|CALL|EXPORT|IMPORT)\b",

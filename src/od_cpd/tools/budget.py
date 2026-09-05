@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from ..dbio import rows_as_dicts
 from ..provenance import provenance_block
-from ._common import direction_of, interpolate_sql, resolve_period
+from ..periods import is_cadence_period
+from ._common import direction_of, interpolate_sql, resolve_period, validate_choice
 from .agency_scope import resolve_agency_scope
 
 # borough/sponsor are excluded: they live on the schedule edge (M:M double-count
@@ -18,11 +19,14 @@ def budget_breakdown_from(con, group_by="managing_agency", metric="total_budget"
     """Sum a budget metric grouped by ``group_by`` for one reporting period.
 
     Budget aggregates ALWAYS dedup to distinct (fms_id, managing_agency) before
-    summing (spec §6.4). ``category`` grouping joins category_dim at the fms_id
-    grain (one category per line — additive, no fan-out). Sponsor/borough cuts
+    summing (spec §6.4). ``category`` grouping joins category_dim on the same
+    composite key (one category per line — additive, no fan-out). Sponsor/borough cuts
     require joining the schedule edge, which risks M:M double-counting; use
     ``run_sql`` for those richer cuts.
     """
+    err = validate_choice(agency_role, {"auto", "sponsor", "managing"}, "agency_role")
+    if err:
+        return err
     if group_by not in _GROUPABLE:
         return {"error": f"group_by must be one of {sorted(_GROUPABLE)} (v1)"}
     p, err = resolve_period(con, "budget_history", period)
@@ -39,9 +43,9 @@ def budget_breakdown_from(con, group_by="managing_agency", metric="total_budget"
             return scope
         inner_where += f" AND {scope['where']}"
     if group_by == "category":
-        # category_dim keys on fms_id (one category per line) — the join can't fan out.
+        # Join the complete line key so another holder's category can't fan out.
         inner = (f"SELECT DISTINCT b.fms_id, b.managing_agency, c.category, b.{col} "
-                 f"FROM budget_history b JOIN category_dim c USING (fms_id) "
+                 f"FROM budget_history b JOIN category_dim c USING (fms_id, managing_agency) "
                  f"WHERE {inner_where}")
     else:
         inner = (f"SELECT DISTINCT fms_id, managing_agency, {col} FROM budget_history "
@@ -76,6 +80,11 @@ def _change_envelope(fv, tv):
 def budget_change_from(con, target, from_period, to_period, metric="total_budget",
                        agency_role="auto", managing_agency=None):
     """target = 'agency:DEP' or 'fms:ABC'. Δ of metric between two periods (source LAG-aware)."""
+    err = validate_choice(agency_role, {"auto", "sponsor", "managing"}, "agency_role")
+    if err:
+        return err
+    if not is_cadence_period(from_period) or not is_cadence_period(to_period):
+        return {"error": "from_period and to_period must be YYYYMM ending in 01/05/09."}
     col = _METRICS.get(metric)
     if not col:
         return {"error": _METRIC_ERR}

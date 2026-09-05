@@ -85,3 +85,91 @@ def test_rank_budget_row_without_fb86_line_gets_null_name():
     row = next(x for x in r["rows"] if x["fms_id"] == "QONLY")
     assert row["managing_agency"] == "QPL"
     assert row["fms_project_name"] is None
+
+
+def test_rank_delayed_budgets_use_current_funding_and_complete_line_keys():
+    con = duckdb.connect(":memory:")
+    schema.apply_schema(con)
+    con.executemany(
+        "INSERT INTO raw_project_detail (reporting_period, managing_agency,"
+        " sponsor_agency, pid, fms_id, total_budget, current_phase)"
+        " VALUES (?, ?, 'DPR', ?, ?, '100', 'Construction')",
+        [
+            # PID 1 replaced OLD with SHARED; matching its old line is incorrect.
+            ["202509", "DDC", "1", "OLD"],
+            ["202601", "DDC", "1", "SHARED"],
+            # Two delayed PIDs fund the same line, which must rank only once.
+            ["202601", "DDC", "2", "SHARED"],
+            # A different holder's same-FMS line does not fund a delayed PID.
+            ["202601", "DPR", None, "SHARED"],
+            # Its latest link/schedule period predates the global latest period.
+            ["202509", "DDC", "3", "OLDER"],
+            # Previously delayed, currently on time: neither is a current match.
+            ["202509", "DDC", "4", "RECOVERED"],
+            ["202601", "DDC", "4", "RECOVERED"],
+        ],
+    )
+    con.executemany(
+        "INSERT INTO raw_schedule_history (reporting_period, managing_agency,"
+        " pid, current_phase, variance_day)"
+        " VALUES (?, 'DDC', ?, 'Construction', ?)",
+        [
+            ["202509", "1", "5"],
+            ["202601", "1", "10"],
+            ["202601", "2", "20"],
+            ["202509", "3", "30"],
+            ["202509", "4", "40"],
+            ["202601", "4", "0"],
+        ],
+    )
+    con.executemany(
+        "INSERT INTO raw_budget_history (managing_agency, fms_id,"
+        " year_month_reported, total_budget, spend_to_date, budget_variance)"
+        " VALUES (?, ?, '202601', ?, '0', '0')",
+        [
+            ["DDC", "OLD", "500"],
+            ["DPR", "SHARED", "400"],
+            ["DDC", "RECOVERED", "300"],
+            ["DDC", "SHARED", "200"],
+            ["DDC", "OLDER", "100"],
+        ],
+    )
+    materialize.materialize_all(con)
+
+    unfiltered = rank_projects_from(con, entity="budget", rank_by="total_budget")
+    assert len(unfiltered["rows"]) == 5
+    result = rank_projects_from(con, entity="budget", rank_by="total_budget",
+                                delayed_only=True)
+    assert [(r["managing_agency"], r["fms_id"], r["total_budget"])
+            for r in result["rows"]] == [("DDC", "SHARED", 200), ("DDC", "OLDER", 100)]
+    # The returned SQL preserves the same scope and cardinality.
+    reproduced = con.execute(result["provenance"]["reproduce_sql"]).fetchall()
+    assert [(r[0], r[1], r[3]) for r in reproduced] == [
+        ("SHARED", "DDC", 200), ("OLDER", "DDC", 100),
+    ]
+
+
+def test_rank_budget_category_matches_the_complete_line_key():
+    con = duckdb.connect(":memory:")
+    _raw(con)
+    con.execute(
+        "INSERT INTO raw_budget_history (managing_agency, fms_id, year_month_reported,"
+        " total_budget, spend_to_date, budget_variance) "
+        "VALUES ('DPR', 'A', '202601', '1000', '0', '0')")
+    materialize.materialize_all(con)
+    # Explicit classifications isolate the ranking predicate from taxonomy rules.
+    con.execute("""
+        CREATE OR REPLACE TABLE category_dim AS
+        SELECT * FROM (VALUES
+            ('DDC', 'A', 'Parks & Recreation'),
+            ('DPR', 'A', 'Sewer & Water'),
+            ('DDC', 'B', 'Sewer & Water'),
+            ('DDC', 'C', 'Parks & Recreation')
+        ) AS c(managing_agency, fms_id, category)
+    """)
+
+    result = rank_projects_from(con, entity="budget", rank_by="total_budget",
+                                category="Parks & Recreation")
+    assert [(r["managing_agency"], r["fms_id"]) for r in result["rows"]] == [
+        ("DDC", "C"), ("DDC", "A"),
+    ]

@@ -29,9 +29,8 @@ def _con():
     con.executemany(
         "INSERT INTO raw_budget_history (managing_agency, fms_id, year_month_reported,"
         " total_budget, spend_to_date, budget_variance) VALUES (?,?,?,?,?,?)",
-        [["DDC", f, "202601", tb, "0", "0"] for f, tb in
-         [("LB99NLOH", "100"), ("X1", "200"), ("P1", "300"), ("B1", "400"), ("R1", "500"),
-          ("F1", "600"), ("M1", "700"), ("GI1", "800"), ("TP1", "900"), ("DC1", "1000")]],
+        [[ma, f, "202601", tb, "0", "0"]
+         for period, ma, _, _, f, _, tb, _ in pd_rows if period == "202601"],
     )
     return con
 
@@ -39,17 +38,19 @@ def _con():
 def test_classification_precedence():
     con = _con()
     categories.build_category_dim(con)
-    cat = dict(con.execute("SELECT fms_id, category FROM category_dim").fetchall())
-    assert cat["LB99NLOH"] == "Library"            # tier-1 fms prefix
-    assert cat["X1"] == "Library"                  # tier-1 ever-managed (NYPL hist) beats facilities keyword
-    assert cat["P1"] == "Bridges"                  # 'Park Pedestrian Bridges' route to Bridges, not Parks
-    assert cat["B1"] == "Bridges"
-    assert cat["R1"] == "Sewer & Water"            # generic ten-year, routed by sponsor DEP
-    assert cat["F1"] == "Fire & EMS"               # sponsor beats generic 'facilities' (tier 2 < tier 3)
-    assert cat["M1"] == "Other / Uncategorized"
-    assert cat["GI1"] == "Sewer & Water"           # DEP green-infra: keyword dropped, sponsor decides
-    assert cat["TP1"] == "Parks & Recreation"      # DPR tree-planting: same shared label, sponsor decides
-    assert cat["DC1"] == "Cultural Institutions"   # DCLA owner-authoritative beats the 'energy' keyword
+    cat = {(ma, f): c for ma, f, c in con.execute(
+        "SELECT managing_agency, fms_id, category FROM category_dim").fetchall()}
+    assert cat["DDC", "LB99NLOH"] == "Library"       # tier-1 fms prefix
+    assert cat["EDC", "X1"] == "Library"            # reassignment preserves the institution
+    assert cat["NYPL", "X1"] == "Library"
+    assert cat["DDC", "P1"] == "Bridges"            # Park Pedestrian Bridges, not Parks
+    assert cat["DOT", "B1"] == "Bridges"
+    assert cat["DDC", "R1"] == "Sewer & Water"      # generic ten-year, sponsor DEP
+    assert cat["DDC", "F1"] == "Fire & EMS"         # sponsor beats generic facilities
+    assert cat["DDC", "M1"] == "Other / Uncategorized"
+    assert cat["DDC", "GI1"] == "Sewer & Water"     # DEP green-infra
+    assert cat["DDC", "TP1"] == "Parks & Recreation"  # DPR green-infra
+    assert cat["DDC", "DC1"] == "Cultural Institutions"  # DCLA beats Energy
 
 
 def test_loader_and_names():
