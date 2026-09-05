@@ -1,5 +1,6 @@
 # tests/test_schedule_tools.py
 import duckdb
+import pytest
 
 from od_cpd import schema, materialize
 from od_cpd.tools.schedule import (
@@ -176,3 +177,32 @@ def test_schedule_changes_rows_carry_agency_project_name():
     r = schedule_changes_from(con, "delayed", from_period="202509", to_period="202601")
     assert r["changes"]   # non-vacuous: all() over an empty list would pass trivially
     assert all("agency_project_name" in row for row in r["changes"])
+
+
+@pytest.mark.parametrize("change_type", ["delayed", "completed"])
+def test_schedule_changes_reject_interior_gap_but_preserve_prehistory_and_pid_absence(change_type):
+    con = duckdb.connect(":memory:")
+    _raw(con)
+    con.execute("INSERT INTO raw_project_detail (reporting_period, managing_agency, pid, "
+                "fms_id, current_phase) VALUES ('202501', 'DDC', '900', 'OLD', 'Design')")
+    materialize.materialize_all(con)
+    missing = schedule_changes_from(con, change_type, "202505", "202601")
+    assert "interior gap" in missing["error"]
+    assert missing["available_periods"] == ["202501", "202601"]
+    early = schedule_changes_from(con, change_type, "202401", "202601")
+    assert "predates" in early["note"]
+    valid = schedule_changes_from(con, change_type, "202501", "202601")
+    assert "note" not in valid
+    assert valid["changes"] == early["changes"]
+
+
+def test_schedule_tools_reject_unused_invalid_agency_roles_and_reason_scope():
+    assert "error" in schedule_breakdown_from(None, "managing_agency", agency_role="bad")
+    assert "error" in delay_reason_stats_from(None, agency_role="bad")
+    assert "error" in delay_reason_stats_from(None, scope="bad")
+    assert "error" in schedule_changes_from(None, "delayed", agency_role="bad")
+
+
+def test_schedule_tools_reject_unsupported_parameter_combinations():
+    assert "error" in schedule_breakdown_from(None, "borough", metric="count", statistic="mean")
+    assert "error" in schedule_changes_from(None, "delayed", "202509", "202601", include_cancelled=True)

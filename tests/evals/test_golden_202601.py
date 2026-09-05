@@ -1,9 +1,7 @@
 # tests/evals/test_golden_202601.py — goldens pinned to the 202601 snapshot.
-import duckdb
 import pytest
 
-from od_cpd.config import db_path
-from od_cpd.dbio import connect_readonly
+from tests.evals import snapshot_database
 from od_cpd.tools.inspect import get_project_budget_from, get_project_schedule_from
 from od_cpd.tools.lookup import dataset_info_from
 from od_cpd.tools.portfolio import project_portfolio_from
@@ -15,22 +13,8 @@ GOLDEN_PERIOD = "202601"
 
 @pytest.fixture(scope="module")
 def con():
-    # All gating lives here so importing/collecting the module has no side effects.
-    path = db_path()
-    if not path.exists():
-        pytest.skip("live DB not present")
-    try:
-        c = connect_readonly(path)
-        latest = c.execute(
-            "SELECT max(latest_reporting_period) FROM meta").fetchone()[0]
-    except duckdb.Error as e:
-        pytest.skip(f"live DB unreadable: {e}")
-    if latest != GOLDEN_PERIOD:
-        c.close()
-        pytest.skip(f"DB is at {latest}, goldens pinned to {GOLDEN_PERIOD} — re-pin "
-                    "(see tests/evals/README.md)")
-    yield c
-    c.close()
+    with snapshot_database(GOLDEN_PERIOD) as c:
+        yield c
 
 
 def test_dataset_info_orients_with_rules(con):

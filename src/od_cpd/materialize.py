@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import duckdb
 
-from . import categories, data_dictionary
+from . import build_info, categories, data_dictionary
 from .config import CADENCE_MONTHS, VARIANCE_ARTIFACT_DAYS
+from .schema import SCHEMA_VERSION
 
 
 def _cadence_filter(col: str = "p") -> str:
@@ -26,14 +27,15 @@ def _canonical_phase_expr(raw_col: str = "current_phase") -> str:
     analytics stay on phase_norm; parenthesized no-schedule REASONS and anything
     unmapped keep their raw label via ELSE.
     """
-    return f"""CASE {_normalized_phase_expr(raw_col)}
+    return f"""CASE WHEN starts_with(trim({raw_col}), '(') THEN {raw_col}
+               ELSE CASE {_normalized_phase_expr(raw_col)}
                  WHEN 'pre-design' THEN 'Pre-Design'
                  WHEN 'design' THEN 'Design'
                  WHEN 'construction procurement' THEN 'Construction Procurement'
                  WHEN 'construction' THEN 'Construction'
                  WHEN 'close-out' THEN 'Close-out'
                  WHEN 'closeout' THEN 'Close-out'
-                 ELSE {raw_col} END"""
+                 ELSE {raw_col} END END"""
 
 
 def build_normalized(con: duckdb.DuckDBPyConnection) -> None:
@@ -75,7 +77,7 @@ def build_normalized(con: duckdb.DuckDBPyConnection) -> None:
                    -- current_phase is PAIR-keyed (86 historical PID-periods disagree across
                    -- a PID's FMS rows). Parenthesized values are
                    -- no-schedule REASONS, not phases: prefer a real phase, deterministic tiebreak.
-                   COALESCE(min(current_phase) FILTER (WHERE current_phase NOT LIKE '(%'),
+                   COALESCE(min(current_phase) FILTER (WHERE trim(current_phase) NOT LIKE '(%'),
                             min(current_phase)) AS current_phase,
                    max(CASE
                        WHEN {p3} IN ('completed','close-out','closeout') THEN 3
@@ -111,7 +113,7 @@ def build_normalized(con: duckdb.DuckDBPyConnection) -> None:
                {_canonical_phase_expr('fb.current_phase')} AS current_phase,
                {_normalized_phase_expr('fb.current_phase')} AS phase_norm,
                fb.actual_construction_end, fb.actual_design_start, fb.forecast_completion,
-               sx.variance_day,
+               sx.variance_day, (sx.pid IS NOT NULL) AS source_observed,
                CASE WHEN sx.variance_day > 0 THEN 'later'
                     WHEN sx.variance_day < 0 THEN 'earlier'
                     WHEN sx.variance_day = 0 THEN 'unchanged' END AS direction,
@@ -174,6 +176,53 @@ def build_normalized(con: duckdb.DuckDBPyConnection) -> None:
 
 
 def build_analytics(con: duckdb.DuckDBPyConnection) -> None:
+    # Preserve the source-native observations separately from the dashboard spine.
+    # A missing dashboard row is a source-coverage difference, not a missing budget.
+    con.execute(f"""
+        CREATE OR REPLACE TABLE source_schedule_history AS
+        SELECT r.pid, r.reporting_period, r.managing_agency, r.agency_project_name,
+               {_canonical_phase_expr('r.current_phase')} AS current_phase,
+               TRY_CAST(r.completion_date AS DATE) AS completion_date,
+               r.completion_date_type, TRY_CAST(r.variance_day AS BIGINT) AS variance_day,
+               r.reason_for_forecast_completion_change AS reason_for_delay,
+               TRY_CAST(r.data_date AS DATE) AS data_date,
+               EXISTS (SELECT 1 FROM schedule_history s WHERE s.pid = r.pid
+                       AND s.reporting_period = r.reporting_period) AS in_dashboard
+        FROM raw_schedule_history r
+        WHERE r.pid IS NOT NULL AND {_cadence_filter('r.reporting_period')}
+    """)
+    con.execute(f"""
+        CREATE OR REPLACE TABLE schedule_source_coverage AS
+        WITH source AS (
+            SELECT pid, count(*) AS source_rows,
+                   count(*) FILTER (WHERE in_dashboard) AS matched_rows,
+                   count(*) FILTER (WHERE NOT in_dashboard) AS source_only_rows,
+                   max(reporting_period) AS source_latest_period,
+                   sum(CASE WHEN variance_day BETWEEN -{VARIANCE_ARTIFACT_DAYS}
+                            AND {VARIANCE_ARTIFACT_DAYS} THEN variance_day END)
+                       AS source_cumulative_variance_days
+            FROM source_schedule_history GROUP BY pid
+        ), dashboard AS (
+            SELECT pid, count(*) AS dashboard_rows,
+                   max(reporting_period) AS dashboard_latest_period,
+                   sum(CASE WHEN variance_day BETWEEN -{VARIANCE_ARTIFACT_DAYS}
+                            AND {VARIANCE_ARTIFACT_DAYS} THEN variance_day END)
+                       AS dashboard_cumulative_variance_days
+            FROM schedule_history GROUP BY pid
+        )
+        SELECT coalesce(s.pid, d.pid) AS pid,
+               coalesce(s.source_rows, 0) AS source_rows,
+               coalesce(d.dashboard_rows, 0) AS dashboard_rows,
+               coalesce(s.matched_rows, 0) AS matched_rows,
+               coalesce(s.source_only_rows, 0) AS source_only_rows,
+               coalesce(d.dashboard_rows, 0) - coalesce(s.matched_rows, 0)
+                   AS dashboard_only_rows,
+               s.source_latest_period, d.dashboard_latest_period,
+               s.source_cumulative_variance_days, d.dashboard_cumulative_variance_days,
+               coalesce(s.source_only_rows, 0) > 0 AS has_omitted_source_observations
+        FROM source s FULL OUTER JOIN dashboard d USING (pid)
+    """)
+
     # pid_funding — distinct (fms_id, managing_agency) commitments per pid at its latest period.
     con.execute("""
         CREATE OR REPLACE TABLE pid_funding AS
@@ -360,7 +409,11 @@ def build_analytics(con: duckdb.DuckDBPyConnection) -> None:
 
 
 def materialize_all(con: duckdb.DuckDBPyConnection) -> None:
+    fingerprint = build_info.current_fingerprint()
     build_normalized(con)
     build_analytics(con)
     categories.build_category_dim(con)
     data_dictionary.build_column_dict(con)
+    # Completion markers are last: a failed build must not claim the new schema.
+    build_info.write_build_info(con, expected_fingerprint=fingerprint)
+    con.execute("UPDATE meta SET schema_version = ?", [SCHEMA_VERSION])

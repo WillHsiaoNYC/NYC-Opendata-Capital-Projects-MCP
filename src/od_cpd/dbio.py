@@ -30,10 +30,19 @@ def interrupt_after(con: duckdb.DuckDBPyConnection, seconds: int) -> threading.T
 
 
 def connect_readonly(path: Path | None = None) -> duckdb.DuckDBPyConnection:
+    """Open the database without allowing submitted queries to access other files
+    or install/load extensions. Read-only mode alone only prevents database writes.
+    Configure the boundary before any query runs and prevent later SQL changes.
+    """
     path = path or db_path()
     if not path.exists():
         raise DBMissingError(f"DB missing at {path} — run `od-cpd init`")
-    return duckdb.connect(str(path), read_only=True)
+    return duckdb.connect(str(path), read_only=True, config={
+        "enable_external_access": False,
+        "autoinstall_known_extensions": False,
+        "autoload_known_extensions": False,
+        "lock_configuration": True,
+    })
 
 
 def _assert_schema_current(con: duckdb.DuckDBPyConnection) -> None:

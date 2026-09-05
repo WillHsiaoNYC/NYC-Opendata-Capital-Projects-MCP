@@ -15,11 +15,6 @@ def test_primer_states_pid_fms_and_terminology():
     assert "slippage" in PRIMER.lower()  # terminology clause present
 
 
-def test_server_registers_three_tools():
-    names = {t.name for t in server.mcp._tool_manager.list_tools()}
-    assert {"run_sql", "dataset_info", "list_agencies"} <= names
-
-
 def test_run_sql_docstring_steers_to_typed_tables_and_grain_rules():
     # Gap 1: the escape hatch must carry the rules that protect raw SQL use.
     doc = server.run_sql.__doc__ or ""
@@ -42,7 +37,7 @@ def test_run_sql_docstring_covers_all_materialized_tables():
 
 def test_every_tool_is_annotated():
     tools = anyio.run(mcp.list_tools)
-    assert len(tools) >= 17
+    assert len(tools) == 18
     for t in tools:
         assert t.annotations is not None, t.name
         # local DuckDB is a closed world — no tool reaches outside it

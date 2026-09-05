@@ -66,7 +66,7 @@ CREATE TABLE agency_dim (
 );
 """
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 4
 
 
 def _raw_ddl(table: str, columns: list[str]) -> str:

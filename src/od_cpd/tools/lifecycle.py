@@ -5,52 +5,70 @@ from ..dbio import rows_as_dicts
 from ..provenance import provenance_block
 from ._common import BOROUGH_GROUP_NOTE
 
-_MILESTONES = {"actual_design_start", "actual_construction_end"}
+_MILESTONES = ("actual_design_start", "actual_construction_end")
 # sponsor_agency is excluded: it can be a composite string ('DOT, DPR') and would need
 # atomization; use schedule_breakdown for sponsor cuts.
 _GROUPABLE = {"managing_agency", "borough", "lifecycle_status"}
 
-_NOTE = "Only projects with BOTH actual dates are counted; suppression hits forecasts not actuals."
+_NOTE = (
+    "Duration statistics include only latest-known PIDs with both actual dates in "
+    "forward order. Missing dates and negative intervals are excluded and counted; "
+    "invalid_intervals retains the source dates. Most actual milestones may be "
+    "suppressed; actual_construction_end is never suppressed.")
 
 
 def project_duration_stats_from(con, from_milestone="actual_design_start",
                                 to_milestone="actual_construction_end", group_by=None):
     if from_milestone not in _MILESTONES or to_milestone not in _MILESTONES:
         return {"error": f"milestones must be in {sorted(_MILESTONES)} (v1)"}
+    if _MILESTONES.index(from_milestone) >= _MILESTONES.index(to_milestone):
+        return {"error": "from_milestone must precede to_milestone; supported forward "
+                         "order is actual_design_start to actual_construction_end."}
     if group_by is not None and group_by not in _GROUPABLE:
         return {"error": f"group_by must be one of {sorted(_GROUPABLE)} (or omitted)"}
     # schedule_history carries actual_design_start + actual_construction_end (typed DATE).
     # Use each PID's LATEST snapshot only, else a PID is counted once per period it appears in.
     gcol = f", {group_by}" if group_by else ""
-    base = (f"WITH latest AS (SELECT pid{gcol}, {from_milestone} AS d_from, {to_milestone} AS d_to "
+    base = (f"WITH latest AS (SELECT pid{gcol}, {from_milestone} AS from_date, "
+            f"{to_milestone} AS to_date "
             f"FROM schedule_history "
             f"QUALIFY row_number() OVER (PARTITION BY pid ORDER BY reporting_period DESC) = 1) "
-            f"SELECT pid{gcol}, datediff('day', d_from, d_to) AS days FROM latest "
-            f"WHERE d_from IS NOT NULL AND d_to IS NOT NULL")
-    total = con.execute("SELECT count(DISTINCT pid) FROM schedule_history").fetchone()[0]
+            f"SELECT pid{gcol}, from_date, to_date, "
+            f"datediff('day', from_date, to_date) AS days FROM latest")
     scope = {"from": from_milestone, "to": to_milestone, "group_by": group_by}
-    # One aggregate engine for both shapes — grouped is the same SELECT plus GROUP BY.
-    agg = ("count(*) AS n_projects, avg(days) AS mean_days, median(days) AS median_days, "
-           "min(days) AS min_days, max(days) AS max_days")
+    # Keep all rows in the population; FILTER limits only the duration statistics.
+    counts = ("count(*) AS population_total, "
+              "count(*) FILTER (WHERE days >= 0) AS n_projects, "
+              "count(*) FILTER (WHERE days IS NULL) AS excluded_missing_dates, "
+              "count(*) FILTER (WHERE days < 0) AS excluded_invalid_order")
+    stats = ", ".join(f"{func}(days) FILTER (WHERE days >= 0) AS {name}_days"
+                      for func, name in [("avg", "mean"), ("median", "median"),
+                                         ("min", "min"), ("max", "max")])
+    summary_sql = f"SELECT {counts}, {stats} FROM ({base})"
+    summary = rows_as_dicts(con, summary_sql)[0]
+    quality = {key: summary.pop(key) for key in
+               ("population_total", "n_projects", "excluded_missing_dates", "excluded_invalid_order")}
+    invalid_sql = f"SELECT * FROM ({base}) WHERE days < 0 ORDER BY pid"
+    invalid = rows_as_dicts(con, invalid_sql)
+    for row in invalid:
+        row["quality_flag"] = "negative_forward_interval"
+    result = {**quality, "invalid_intervals": invalid, "note": _NOTE}
+    components = {"summary": summary_sql, "invalid_intervals": invalid_sql}
     if group_by:
-        sql = (f"SELECT {group_by}, {agg} FROM ({base}) GROUP BY {group_by} "
-               f"ORDER BY n_projects DESC")
+        sql = (f"SELECT {group_by}, {counts}, {stats} FROM ({base}) GROUP BY {group_by} "
+               f"ORDER BY n_projects DESC, {group_by} NULLS LAST")
         groups = rows_as_dicts(con, sql)
-        n = sum(g["n_projects"] for g in groups)
-        note = _NOTE + (" " + BOROUGH_GROUP_NOTE if group_by == "borough" else "")
-        return {"n_projects": n, "excluded_missing_dates": total - n,
-                "group_by": group_by, "groups": groups, "note": note,
-                "provenance": provenance_block(
-                    definition=f"duration between actual milestones by {group_by}",
-                    scope=scope, row_count=len(groups), reproduce_sql=sql)}
-    sql = f"SELECT {agg} FROM ({base})"
-    stats = rows_as_dicts(con, sql)[0]
-    n = stats.pop("n_projects")
-    if n == 0:
-        return {"n_projects": 0, "excluded_missing_dates": total, "stats": None,
-                "provenance": provenance_block(definition="duration between actual milestones",
-                    scope=scope, row_count=0, reproduce_sql=sql)}
-    return {"n_projects": n, "excluded_missing_dates": total - n,
-            "stats": stats, "note": _NOTE,
-            "provenance": provenance_block(definition="duration between actual milestones",
-                scope=scope, row_count=n, reproduce_sql=sql)}
+        result.update(group_by=group_by, groups=groups)
+        if group_by == "borough":
+            result["note"] += " " + BOROUGH_GROUP_NOTE
+        components["groups"] = sql
+        row_count = len(groups)
+    else:
+        sql, row_count = summary_sql, 1
+        result["stats"] = summary if quality["n_projects"] else None
+    result["provenance"] = provenance_block(
+        definition="duration between actual milestones, excluding invalid forward intervals",
+        scope=scope, row_count=row_count, reproduce_sql=sql, components=components,
+        excluded={"missing_dates": quality["excluded_missing_dates"],
+                  "invalid_order": quality["excluded_invalid_order"]})
+    return result

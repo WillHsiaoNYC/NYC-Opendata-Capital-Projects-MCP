@@ -3,7 +3,7 @@
 A local [MCP](https://modelcontextprotocol.io) server over the NYC Capital
 Projects Dashboard (CPD) datasets on [NYC Open Data](https://opendata.cityofnewyork.us/).
 It ingests four public Socrata datasets into a single local DuckDB and exposes
-**16 tools** so an AI assistant can answer schedule, budget, and lifecycle
+**18 tools** so an AI assistant can answer schedule, budget, and lifecycle
 questions about NYC capital projects — with the domain rules (PID↔FMS
 many-to-many, role-aware agency attribution, signed variance reporting) baked
 into the tools instead of left for the caller to rediscover.
@@ -95,7 +95,7 @@ query to confirm it works.
 ```
 
 **What "done" looks like:** your AI reports the loaded reporting period (e.g.
-`202601`), confirms `od-cpd` is connected with its **16 tools**, and answers a
+`202605`), confirms `od-cpd` is connected with its **18 tools**, and answers a
 test question like *"What's the biggest NYC capital project right now?"* Takes a
 few minutes, mostly the dataset download.
 
@@ -120,7 +120,7 @@ Requires [Python ≥ 3.12](https://www.python.org/) and
 git clone https://github.com/WillHsiaoNYC/NYC-Opendata-Capital-Projects-MCP.git
 cd NYC-Opendata-Capital-Projects-MCP
 
-uv sync
+uv sync --locked
 uv run od-cpd init        # download + materialize all 4 datasets → ./var/cpd.duckdb
 uv run od-cpd status      # confirm the loaded reporting period
 ```
@@ -165,13 +165,21 @@ on iCloud-synced paths.)
 
 The source datasets report on a **Jan / May / Sep** cycle, and Socrata
 typically publishes each period **~2.5–3 months later** (so new data usually
-lands around **April, August, and December**). `od-cpd update` is a no-op when
-nothing is newer, so it's safe to run any time — check around those months:
+lands around **April, August, and December**). Source revision times and reporting
+periods are separate: check both before interpreting freshness.
 
 ```bash
-uv run od-cpd status      # what period is loaded now
-uv run od-cpd update      # re-ingest only if Socrata is newer
+uv run od-cpd status                    # local period, ingestion time and build
+uv run od-cpd status --check-upstream   # verify source revisions and complete periods
+uv run od-cpd update                    # refresh newer sources, or rebuild changed rules
+uv run od-cpd rematerialize             # rebuild local raw data without downloading
 ```
+
+Refresh and rematerialization build in an isolated shadow, validate its inputs,
+then atomically replace the database. Before/after health reports remain under
+`var/ingest-runs/`; a failed build preserves the prior database and its diagnostics.
+Reconnect MCP clients after changing server code. See `docs/FEATURES.md` for
+snapshot scopes, source-coverage reconciliation and export provenance.
 
 To keep it fresh automatically, schedule `update` (e.g. monthly via cron):
 
@@ -182,7 +190,7 @@ To keep it fresh automatically, schedule `update` (e.g. monthly via cron):
 
 ## What's inside
 
-- **`docs/FEATURES.md`** — the canonical inventory: all 16 tools and every
+- **`docs/FEATURES.md`** — the canonical inventory: all 18 tools and every
   domain rule the server encodes. Start here.
 
 The headline domain rules, briefly:

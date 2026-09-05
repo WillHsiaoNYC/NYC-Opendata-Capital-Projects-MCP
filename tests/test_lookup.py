@@ -36,7 +36,7 @@ def test_list_agencies_filters_and_flags(con):
     a = res["agencies"][0]
     assert a["cpdw_acronym"] == "DDC"
     assert a["cpd_active"] is True
-    assert res["provenance"]["reproduce_sql"] is None
+    assert con.execute(res["provenance"]["reproduce_sql"]).fetchone()[0] == "ddc"
 
 
 def test_list_agencies_surfaces_role_default(con):
@@ -139,3 +139,37 @@ def test_dataset_info_available_periods_from_typed_tables():
     assert qj["available_periods"] == ["202509", "202601"]
     assert "adoption" in qj["period_note"].lower()           # original-budget caveat
     assert gy["available_periods"] == ["202601"]             # from project_budget_fy
+
+
+def test_categories_use_complete_snapshot_and_reproducible_totals():
+    with _duckdb.connect(":memory:") as c:
+        schema.apply_schema(c)
+        for period in ("202409", "202501", "202505", "202509", "202601"):
+            c.executemany("INSERT INTO raw_budget_history "
+                "(managing_agency, fms_id, year_month_reported, total_budget, spend_to_date) "
+                "VALUES ('DDC', ?, ?, '100', '0')", [[str(i), period] for i in range(10)])
+        c.execute("INSERT INTO raw_budget_history "
+            "(managing_agency, fms_id, year_month_reported, total_budget, spend_to_date) "
+            "VALUES ('DDC', '0', '202605', '999', '0')")
+        _materialize.materialize_all(c)
+        result = lookup.list_categories_from(c)
+        assert result["period"] == "202601"
+        assert sum(r["n_budget_lines"] for r in result["categories"]) == 10
+        assert sum(r["total_budget"] for r in result["categories"]) == 1000
+        assert c.execute(result["provenance"]["reproduce_sql"]).fetchone()[2] == 1000
+
+
+def test_dataset_info_reports_native_schedule_periods():
+    with _built_con() as c:
+        c.execute("INSERT INTO raw_schedule_history (pid, reporting_period, variance_day) "
+                  "VALUES ('source-only', '202605', '731')")
+        c.execute("INSERT INTO meta VALUES "
+                  "('fb86-vt7u','reporting_period',1,now(),5,'h',0,'202601',NULL,NULL),"
+                  "('95tx-snak','reporting_period',1,now(),2,'h',0,'202605',NULL,NULL)")
+        _materialize.materialize_all(c)
+        info = lookup.dataset_info_from(c)
+        by_id = {d["dataset_id"]: d for d in info["datasets"]}
+        assert by_id["fb86-vt7u"]["available_periods"] == ["202601"]
+        assert by_id["95tx-snak"]["available_periods"] == ["202601", "202605"]
+        assert info["source_coverage"]["source_only_rows"] == 1
+        assert info["freshness_check"] == "local_only"

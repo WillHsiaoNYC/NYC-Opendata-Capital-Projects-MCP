@@ -1,7 +1,14 @@
 # tests/test_run_sql.py
+import csv
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+
 import duckdb
 import pytest
+from openpyxl import load_workbook
 
+from od_cpd import dbio, server
 from od_cpd.tools.sql import validate_select, run_sql_on
 
 
@@ -108,3 +115,101 @@ def test_truncated_inline_result_carries_csv_hint():
     assert "output='csv'" in r["truncation_note"]
     r2 = run_sql_on(con, "SELECT 1", row_cap=3)
     assert "truncation_note" not in r2
+
+
+@pytest.fixture
+def query_database(tmp_path, monkeypatch):
+    path = tmp_path / "query.duckdb"
+    with duckdb.connect(str(path)) as con:
+        con.execute("CREATE TABLE projects AS SELECT 1 AS id, 'Synthetic project' AS name")
+        con.execute("CREATE TABLE budgets AS SELECT 1 AS id, 100 AS amount")
+    monkeypatch.setenv("OD_CPD_DB", str(path))
+    monkeypatch.setenv("OD_CPD_EXPORT_DIR", str(tmp_path / "controlled exports'"))
+    return path
+
+
+@pytest.mark.parametrize("output", ["inline", "csv", "xlsx"])
+@pytest.mark.parametrize("reader", ["read_text", "read_blob", "read_csv", "glob", "query"])
+def test_run_sql_blocks_external_files_in_every_mode(query_database, tmp_path, output, reader):
+    marker = tmp_path / "synthetic marker's.csv"
+    marker.write_text("payload\nsynthetic_marker\n", encoding="utf-8")
+    path = dbio.sql_literal(str(tmp_path / "*.csv") if reader == "glob" else str(marker))
+    query = f"SELECT * FROM {reader}({path})"
+    if reader == "query":
+        # Dynamic SQL still encounters the engine boundary even though the outer
+        # validator treats its query argument as a string literal.
+        nested = dbio.sql_literal(f"SELECT * FROM read_text({path})")
+        query = f"SELECT * FROM query({nested})"
+    with pytest.raises(duckdb.PermissionException, match="disabled by configuration"):
+        server.run_sql(query, output=output)
+    assert not list((tmp_path / "controlled exports'").glob("*"))
+
+
+@pytest.mark.parametrize("output", ["inline", "csv", "xlsx"])
+def test_run_sql_keeps_database_joins_and_controlled_exports(query_database, output):
+    query = "SELECT name, amount FROM projects JOIN budgets USING (id)"
+    result = server.run_sql(query, output=output)
+    assert result["provenance"]["reproduce_sql"] == query
+    if output == "inline":
+        assert result["rows"] == [{"name": "Synthetic project", "amount": 100}]
+    elif output == "csv":
+        with Path(result["file"]).open(encoding="utf-8", newline="") as stream:
+            assert list(csv.reader(stream)) == [["name", "amount"], ["Synthetic project", "100"]]
+    else:
+        wb = load_workbook(result["file"], read_only=True)
+        try:
+            assert set(wb.sheetnames) == {"data", "methodology"}
+            assert list(wb["data"].values) == [("name", "amount"), ("Synthetic project", 100)]
+        finally:
+            wb.close()
+
+
+def test_run_sql_blocks_network_and_extension_autoload(query_database, tmp_path, monkeypatch):
+    requests = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            requests.append(self.path)
+            self.send_error(404)
+
+        def do_HEAD(self):
+            self.do_GET()
+
+        def log_message(self, *args):
+            pass
+
+    # Both data URLs and extension repositories point only to this bounded local
+    # responder. A regression can neither download code nor contact the internet.
+    http = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=http.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{http.server_port}"
+    extension_dir = tmp_path / "isolated-extensions"
+    connect = duckdb.connect
+
+    def isolated_connect(*args, **kwargs):
+        kwargs["config"] = {
+            "extension_directory": str(extension_dir),
+            "autoinstall_extension_repository": url,
+            "custom_extension_repository": url,
+            **kwargs.get("config", {}),
+        }
+        return connect(*args, **kwargs)
+
+    monkeypatch.setattr(dbio.duckdb, "connect", isolated_connect)
+    try:
+        for output in ("inline", "csv", "xlsx"):
+            with pytest.raises(duckdb.PermissionException, match="disabled by configuration"):
+                server.run_sql(f"SELECT * FROM read_csv('{url}/data.csv')", output=output)
+            with pytest.raises(duckdb.CatalogException, match="sqlite_scanner extension"):
+                server.run_sql("SELECT * FROM sqlite_scan(':memory:', 't')", output=output)
+        with dbio.ro_conn() as con:
+            assert con.execute("SELECT count(*) FROM duckdb_functions() "
+                               "WHERE function_name = 'sqlite_scan'").fetchone() == (0,)
+        assert requests == []
+        assert not list(extension_dir.rglob("*"))
+    finally:
+        http.shutdown()
+        http.server_close()
+        thread.join(timeout=2)
+        assert not thread.is_alive()

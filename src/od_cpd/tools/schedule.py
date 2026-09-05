@@ -6,7 +6,7 @@ from ..dbio import rows_as_dicts
 from ..periods import is_cadence_period
 from ..provenance import provenance_block
 from ._common import (BOROUGH_GROUP_NOTE, CATEGORY_GROUP_NOTE, VARIANCE_ARTIFACT_DAYS,
-                      direction_of, interpolate_sql, resolve_period)
+                      direction_of, interpolate_sql, resolve_period, validate_choice)
 from .agency_scope import resolve_agency_scope
 
 _GROUPABLE = {"managing_agency", "sponsor_agency", "borough", "phase_norm",
@@ -23,6 +23,12 @@ _VARIANCE_STATS = {
 
 def schedule_breakdown_from(con, group_by, metric="count", statistic="count",
                             period="current", agency=None, agency_role="auto"):
+    error = validate_choice(agency_role, {"auto", "sponsor", "managing"}, "agency_role")
+    if error:
+        return error
+    if metric == "count" and statistic != "count":
+        return {"error": "metric='count' requires statistic='count'; use "
+                         "metric='schedule_variance' for day-valued statistics."}
     if group_by not in _GROUPABLE:
         return {"error": f"group_by must be one of {sorted(_GROUPABLE)}"}
     p, err = resolve_period(con, "schedule_history", period)
@@ -37,6 +43,7 @@ def schedule_breakdown_from(con, group_by, metric="count", statistic="count",
             return scope
         where += f" AND {scope['where']}"
     excluded_artifacts = None
+    excluded_sql = None
     if metric == "count":
         agg = "count(*)"
     elif metric == "schedule_variance":
@@ -45,11 +52,11 @@ def schedule_breakdown_from(con, group_by, metric="count", statistic="count",
             return {"error": f"statistic must be one of {sorted(_VARIANCE_STATS)}"}
         # Forecast-placeholder artifacts (raw values like −364,938 days) corrupt
         # day-valued aggregates — same guard as rank_projects, dropped rows counted.
-        excluded_artifacts = con.execute(
-            f"SELECT count(*) FROM schedule_history WHERE {where} "
+        excluded_sql = (
+            f"SELECT count(*) AS excluded_artifacts FROM schedule_history WHERE {where} "
             f"AND variance_day IS NOT NULL "
-            f"AND variance_day NOT BETWEEN -{VARIANCE_ARTIFACT_DAYS} AND {VARIANCE_ARTIFACT_DAYS}",
-            params).fetchone()[0]
+            f"AND variance_day NOT BETWEEN -{VARIANCE_ARTIFACT_DAYS} AND {VARIANCE_ARTIFACT_DAYS}")
+        excluded_artifacts = con.execute(excluded_sql, params).fetchone()[0]
         where += (f" AND variance_day BETWEEN -{VARIANCE_ARTIFACT_DAYS} "
                   f"AND {VARIANCE_ARTIFACT_DAYS}")
     else:
@@ -67,7 +74,7 @@ def schedule_breakdown_from(con, group_by, metric="count", statistic="count",
         # several of its lines share it, once more in each further category.
         src = ("schedule_history JOIN "
                "(SELECT DISTINCT l.pid, l.reporting_period, c.category "
-               " FROM schedule_budget_link l JOIN category_dim c USING (fms_id)) cat "
+               " FROM schedule_budget_link l JOIN category_dim c USING (fms_id, managing_agency)) cat "
                "USING (pid, reporting_period)")
         grp = "cat.category"
     else:
@@ -85,7 +92,10 @@ def schedule_breakdown_from(con, group_by, metric="count", statistic="count",
               "provenance": provenance_block(
                   definition=f"{statistic} of {metric} by {group_by}",
                   scope={"period": p, "agency": agency, "agency_role": agency_role},
-                  row_count=len(groups), reproduce_sql=interpolate_sql(sql, params))}
+                  row_count=len(groups), reproduce_sql=interpolate_sql(sql, params),
+                  components={"groups": interpolate_sql(sql, params),
+                              **({"excluded_artifacts": interpolate_sql(excluded_sql, params)}
+                                 if excluded_sql else {})})}
     if excluded_artifacts is not None:
         result["excluded_artifacts"] = excluded_artifacts
         if excluded_artifacts:
@@ -102,6 +112,10 @@ def schedule_breakdown_from(con, group_by, metric="count", statistic="count",
 
 def delay_reason_stats_from(con, period="current", agency=None, scope="current",
                             agency_role="auto"):
+    error = (validate_choice(scope, {"current", "all_history"}, "scope")
+             or validate_choice(agency_role, {"auto", "sponsor", "managing"}, "agency_role"))
+    if error:
+        return error
     base_where = "variance_day > 0"
     params = []
     if scope != "all_history":
@@ -121,19 +135,21 @@ def delay_reason_stats_from(con, period="current", agency=None, scope="current",
            f"WHERE {base_where} AND reason_for_delay IS NOT NULL "
            f"GROUP BY reason_for_delay ORDER BY n DESC")
     rows = rows_as_dicts(con, sql, params)
-    delayed_total, with_reason = con.execute(
-        f"SELECT count(*), count(reason_for_delay) FROM schedule_history "
-        f"WHERE {base_where}", params).fetchone()
+    coverage_sql = ("SELECT count(*) AS delayed_total, count(reason_for_delay) AS with_reason, "
+                    "count(*) - count(reason_for_delay) AS without_reason "
+                    f"FROM schedule_history WHERE {base_where}")
+    coverage = rows_as_dicts(con, coverage_sql, params)[0]
     result = {"reasons": rows,
-              "coverage": {"delayed_total": delayed_total, "with_reason": with_reason,
-                           "without_reason": delayed_total - with_reason},
+              "coverage": coverage,
               "scope": p,
               "label": (f"Delay reasons are populated only when variance_day>0. Scope: {p}. "
                         "coverage gives the denominator: delayed rows with vs without a reason."),
               "provenance": provenance_block(
                   definition="distribution of reason_for_delay (variance>0)",
                   scope={"period": p, "agency": agency, "agency_role": agency_role},
-                  row_count=len(rows), reproduce_sql=interpolate_sql(sql, params))}
+                  row_count=len(rows), reproduce_sql=interpolate_sql(sql, params),
+                  components={"reasons": interpolate_sql(sql, params),
+                              "coverage": interpolate_sql(coverage_sql, params)})}
     if ascope is not None:
         result["agency_scope"] = ascope["agency_scope"]
     return result
@@ -149,18 +165,30 @@ def schedule_changes_from(con, change_type, from_period=None, to_period=None, ag
     A nonexistent period must error, not silently match nothing — an off-cadence
     ``from_period`` would otherwise report EVERY completed/delayed project as new.
     """
-    if not (is_cadence_period(from_period or "") and is_cadence_period(to_period or "")):
+    error = (validate_choice(change_type, {"completed", "delayed"}, "change_type")
+             or validate_choice(agency_role, {"auto", "sponsor", "managing"}, "agency_role"))
+    if error:
+        return error
+    if not (isinstance(from_period, str) and isinstance(to_period, str)
+            and is_cadence_period(from_period) and is_cadence_period(to_period)):
         return {"error": f"Periods must be YYYYMM ending in {'/'.join(CADENCE_MONTHS)} "
                          "(e.g. 202509); see dataset_info for available periods."}
+    if change_type != "completed" and include_cancelled:
+        return {"error": "include_cancelled applies only to change_type='completed'."}
     if from_period >= to_period:
         return {"error": "from_period must be earlier than to_period."}
-    have = {r[0] for r in con.execute(
-        "SELECT DISTINCT reporting_period FROM schedule_history "
-        "WHERE reporting_period IN (?, ?)", [from_period, to_period]).fetchall()}
-    if to_period not in have:
+    available = [r[0] for r in con.execute(
+        "SELECT DISTINCT reporting_period FROM schedule_history ORDER BY reporting_period"
+    ).fetchall()]
+    if to_period not in available:
         return {"error": f"No schedule data at to_period {to_period}; "
-                         "see dataset_info for available periods."}
-    from_exists = from_period in have
+                         f"available periods: {', '.join(available)}.",
+                "available_periods": available}
+    from_exists = from_period in available
+    if not from_exists and from_period >= available[0]:
+        return {"error": f"No schedule data at from_period {from_period}; this is an "
+                         f"interior gap, not a pre-history baseline. Available periods: "
+                         f"{', '.join(available)}.", "available_periods": available}
     ascope = None
     ag = ""
     if agency:

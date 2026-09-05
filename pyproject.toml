@@ -27,6 +27,13 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/od_cpd"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"data/agencies.yaml" = "od_cpd/data/agencies.yaml"
+"data/categories.yaml" = "od_cpd/data/categories.yaml"
+"data/data_dictionary.yaml" = "od_cpd/data/data_dictionary.yaml"
+"data/tables.yaml" = "od_cpd/data/tables.yaml"
+"data/fms_agency_dim.tsv" = "od_cpd/data/fms_agency_dim.tsv"
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]

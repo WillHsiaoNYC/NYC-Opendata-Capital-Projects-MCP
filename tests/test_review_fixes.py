@@ -122,5 +122,4 @@ def test_rank_projects_negative_n_does_not_crash():
     )
     materialize.materialize_all(con)
     r = rank_projects_from(con, entity="schedule", rank_by="period_variance_days", n=-1)
-    assert "error" not in r                 # clamped, no crash
-    assert len(r["rows"]) <= 1
+    assert "integer 1..500" in r["error"]  # invalid limits are explicit errors

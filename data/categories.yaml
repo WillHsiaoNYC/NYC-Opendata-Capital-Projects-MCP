@@ -13,13 +13,18 @@
 #   • sponsor_agency — WHOSE program it is (DDC/EDC/DCAS only *build* it); routes the
 #       generic/unlabeled remainder (e.g. "ROUTINE RECONSTRUCTION", "MISCELLANEOUS").
 #
-# CLASSIFY BY THE STABLE SIGNAL, NEVER BY managing_agency OR raw name. managing_agency
-# is the EXECUTOR/budget-holder and REASSIGNS over time (Seward Park library moved
+# CLASSIFY BY THE STABLE SIGNAL, NEVER BY raw name. managing_agency is only the
+# EXECUTOR/budget-holder and REASSIGNS over time (Seward Park library moved
 # NYPL→EDC between periods). Names are branch-named ("Seward Park", not "...Library").
-# Both undercount badly. Categories are derived at the fms_id grain ACROSS ALL HISTORY
-# (see `ever_managed_by`, computed in code by scanning every period).
+# A current holder alone can undercount ownership; use it only in the explicit
+# fallback and institution-history rules. Categories are derived per (managing_agency, fms_id).
+# Each label/owner uses its own latest nonempty period for that line. All values
+# tied at that period are eligible; taxonomy tier and file order resolve conflicts,
+# independent of source row order. Another holder's labels/ordinary owners do not
+# cross the key. Only `ever_managed_by` spans an FMS ID's holders and full history
+# so institution categories survive reassignment.
 #
-# PRECEDENCE — each fms_id gets the FIRST match across three tiers, in this order:
+# PRECEDENCE — each budget line gets the FIRST match across three tiers, in this order:
 #   TIER 1  keyword/prefix on non-generic categories, in file order
 #           (`ten_year_any` | `fms_prefix` | `ever_managed_by`) — pinpoints a
 #           category regardless of agency.
@@ -31,11 +36,13 @@
 #   else    `other_label`.
 #
 # Match semantics: ten_year_any / generic keywords = case-insensitive substring on
-# ten_year_plan_category; fms_prefix = case-insensitive prefix on fms_id;
-# sponsor_agencies = exact match on sponsor_agency (CPDW acronym).
+# any eligible ten_year_plan_category; fms_prefix = case-insensitive prefix on fms_id;
+# sponsor_agencies = membership in trimmed, uppercase, comma-split owner acronyms.
+# Co-owners use the same file-order precedence. With no known owner, only that
+# line's own holder supplies the sponsor-tier fallback.
 #
-# COVERAGE (202601): 99.3% of total budget lands in a real category; ~0.7% ($1.17B,
-# 18 lines) stays in Other — the city's own undifferentiated "MISCELLANEOUS*" labels.
+# COVERAGE (202601): 99.3% of total budget lands in a real category; ~0.7% ($1.08B,
+# 17 lines) stays in Other — the city's own undifferentiated "MISCELLANEOUS*" labels.
 #
 # AUDIT after a refresh: call list_categories (the tool) and eyeball the 'Other'
 # share; group raw_project_detail by ten_year_plan_category to spot any NEW city

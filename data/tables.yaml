@@ -54,8 +54,11 @@ schedule_history:
   description: >-
     Typed schedule snapshots — fb86 spine joined with 95tx variance; phases
     canonicalized, lifecycle_status derived, borough scalar + list derived from
-    funding lines.
+    funding lines. This dashboard-aligned population excludes source-only schedule
+    observations; inspect source_schedule_history and schedule_source_coverage.
   column_notes:
+    source_observed: whether a matching source-native schedule row exists at this PID/period
+    current_phase: canonical display phase; parenthesized no-schedule reasons remain verbatim, including historical PID exceptions
     variance_day: signed per-period forecast delta in days (positive = later)
     lifecycle_status: >-
       derived: 'completed' when actual_construction_end exists OR phase is
@@ -63,6 +66,36 @@ schedule_history:
       (Defaulted); else 'in_progress'
     borough: "scalar derived from lines: 1 specific borough → it; 2+ → 'Multiple'; only Citywide → 'Citywide'"
     boroughs: distinct line-level borough list (line-keyed location)
+
+source_schedule_history:
+  kind: analytics
+  grain: one row per source (pid, reporting_period)
+  description: >-
+    Typed, cadence-filtered schedule-source observations, including PID/periods
+    absent from the dashboard. Retains native dates, signed variance and reasons.
+  column_notes:
+    in_dashboard: whether schedule_history includes this PID/period
+
+schedule_source_coverage:
+  kind: analytics
+  grain: one row per pid in either schedule population
+  description: >-
+    Full-history reconciliation of source-native and dashboard-aligned schedule
+    rows. Counts matched, source-only and dashboard-only observations, latest
+    periods and each population's artifact-guarded cumulative variance separately.
+  keying_notes: >-
+    Dashboard schedule statistics use schedule_history. Additional source rows
+    do not enter those totals; source_cumulative_variance_days describes the
+    source-native history and dashboard_cumulative_variance_days describes the
+    dashboard-aligned history.
+
+data_build:
+  kind: metadata
+  grain: one singleton row per completed data build
+  description: >-
+    Completed schema version, materializer and dictionary fingerprint, public
+    source revisions, build timestamp and deterministic build ID. A fingerprint
+    change is detected by status and applied with od-cpd rematerialize.
 
 budget_history:
   kind: analytics
@@ -165,10 +198,13 @@ agency_dim:
 
 category_dim:
   kind: dimension
-  grain: one row per fms_id
+  grain: one row per (managing_agency, fms_id)
   description: >-
     Curated category assignment per budget line (categories.yaml: ten-year plan
-    keyword / sponsor routing / fms-id prefix precedence).
+    keyword / sponsor routing / fms-id prefix precedence). Uses all tied values
+    at each line attribute's latest nonempty period, with taxonomy tier and file
+    order resolving conflicts. Only declared institutional owner history spans
+    holders of an FMS ID. Join both key columns to avoid category fan-out.
 
 meta:
   kind: metadata

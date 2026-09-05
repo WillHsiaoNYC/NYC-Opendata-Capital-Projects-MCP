@@ -8,15 +8,17 @@ Single source of truth, surfaced through TWO channels:
 """
 
 PRIMER = """\
-Every project here is, by city definition, a currently-reportable ACTIVE capital
-project. Presence IS the active flag — there is no separate status flag.
+Presence in a selected reporting snapshot means a reportable capital project at
+that period. Historical presence or a latest-known row does not prove presence in
+the current complete snapshot. There is no separate active flag.
 
 "Project" is ambiguous. PID identifies a SCHEDULE (what is built and when); FMS ID
 identifies a BUDGET (a funding source). These are MANY-TO-MANY: one FMS ID may fund
 several PIDs; one PID may be funded by several FMS IDs. Most are 1:1; ~3% fan out —
 when an id resolves to multiple counterparts, LIST ALL, never silently pick one. The
-link is also DIRECTIONALLY asymmetric: every PID has >=1 FMS (no budget, no work), but
-many FMS have NO PID (~45%) — a budget can exist before its project reaches Design, and
+link is also DIRECTIONALLY asymmetric: dashboard PIDs ordinarily have funding links,
+but source-only schedules and historical gaps can lack a matching dashboard edge.
+Many FMS have NO PID — a budget can exist before its project reaches Design, and
 pass-through/expense lines never require a schedule — so a budget with no schedule is
 NORMAL, not missing data.
 
@@ -51,6 +53,14 @@ end of Construction — Pre-Design and Close-out carry no schedule progression, 
 NULL milestones there are suppressed-by-rule, not missing. "Substantial completion"
 = the construction end date (actual_construction_end).
 
+Schedule totals and cumulative variance use the dashboard-aligned PID/period
+population (schedule_history). The native source can have extra or later observations;
+source_schedule_history retains them and schedule_source_coverage reconciles both
+populations. State the schedule universe and cumulative basis. Parenthesized phase
+values are no-schedule reasons, preserved even on historical rows with a PID. Most
+actual milestones as well as forecasts can be suppressed; actual_construction_end
+is the exception. Forward duration statistics exclude and identify invalid date order.
+
 A BUDGET (FMS) is reported for as long as its funding line stays active, which
 outlives construction — so a finished project (lifecycle_status = 'completed') stays
 present, sometimes for years, because its budget line is still open. Completed-but-
@@ -77,13 +87,20 @@ vs the PREVIOUS reporting period (by design); cumulative_budget_change = latest 
 original. Say which basis you are reporting.
 
 Reporting-period basis: every count, total, or ranking is AS OF a reporting period.
-Default to the latest published period and STATE it ("as of 202601"); a comparison
+Default period aggregates to the latest complete snapshot and STATE it ("as of 202601"); a comparison
 names both periods. fms_location, fms_sponsor, and lifetime_budget_variance are
 ALL-HISTORY dimensions (one latest row per line/owner, no reporting_period column) —
 use them to ENRICH (join for a line's borough/owner) or to report LIFETIME figures,
 never to COUNT a single period's inventory. For a period count, aggregate
 raw_project_detail / schedule_history / budget_history filtered to the period. Whatever
 the basis, say so.
+
+Listings and rankings expose population_scope: latest_known (the compatible default,
+each entity's own latest observation) or current (values from the selected complete
+snapshot). Rows identify their observation period and presence in that snapshot.
+Category filtering uses each PID's current funding links by default; category_scope
+all_history explicitly includes former memberships. A complete snapshot can be older
+than a partially published newer source period.
 """
 
 # The primer as discrete rule strings (one per paragraph) — the machine-readable

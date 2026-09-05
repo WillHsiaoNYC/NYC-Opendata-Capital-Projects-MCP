@@ -5,7 +5,7 @@
 > and bump the "Last updated" date. This file is the canonical inventory of what
 > the server does and the rules it encodes.
 >
-> _Last updated: 2026-07-12_
+> _Last updated: 2026-09-05_
 
 The MCP serves NYC Capital Projects data (4 Socrata datasets) over a local DuckDB,
 with domain rules baked in so callers don't have to rediscover them.
@@ -15,12 +15,12 @@ with domain rules baked in so callers don't have to rediscover them.
 **Discovery / metadata**
 - `dataset_info` — per-dataset freshness, current period, available reporting periods (typed-table basis; qj5n adoption-month original-budget records excluded by construction), row counts, key caveats, per-dataset field definitions, and `domain_rules` (the full primer, embedded so clients that drop MCP server instructions still get the rules on the first orienting call)
 - `list_agencies` — agency dictionary (from `agencies.yaml`) + live CPD presence + schedule-executor flag
-- `list_categories` — program/facility categories with budget-line counts & totals
+- `list_categories` — program/facility categories with budget-line counts & totals at the selected complete budget snapshot, using the same fullness resolver as other period aggregates
 - `describe_field` — official field definitions (description, allowed values, primary/foreign key, limitations, notes), filterable by field and/or dataset (both filters are case-insensitive SUBSTRING matches)
 - `describe_table` — schema catalog for every queryable DuckDB table (typed analytics tables, dims, raw mirrors, `meta`): live columns/types from `information_schema` + curated grain/keying notes from `data/tables.yaml` (drift-guarded against the built DB). No arg → catalog; `table=` (case-insensitive) → full detail; raw tables point to `describe_field` for field semantics
 
 **Resolution & detail**
-- `resolve_project_reference` — any PID / FMS ID / name / partial → schedule + budget matches, bucketed. `matched_field` is computed per row (`pid` / `fms_id` / name / description); LIKE wildcards in the query (`%`, `_`) match literally
+- `resolve_project_reference` — exact IDs first, then literal partial IDs, historical names and descriptions. Results are ordered deterministically and deduplicated by PID or `(managing_agency, fms_id)`, with each entity's latest nonempty display name. `limit` (1–500, default 50) and `offset` paginate both buckets; `pagination.schedule` / `pagination.budget` disclose total/returned counts, truncation and `next_offset`. `matched_field` and `match_type` identify the match; `%` and `_` match literally
 - `get_project_schedule` (PID) / `get_project_budget` (FMS line) — full detail + linked counterparts. Both sides list only counterparts from the anchor's LATEST link period (stale links are not current); FMS ids match case-insensitively. Schedule answers carry `forecast_past_due` (see §5)
 - `get_project_history` — period-by-period snapshots for one project (the QA-replay tool). PID lens: phase/forecast/signed variance/reason per period + current-state header with cumulative variance; artifact rows (|variance| > 36,500 days) are kept but flagged `variance_artifact`. FMS lens (case-insensitive): per-line series at the (managing_agency, fms_id) grain — multi-agency ids list ALL lines; the adopted `original_budget` rides a header (adoption months are calendar months, not snapshots; adoption-only lines are a valid header-only answer); the PID lens's `current_state` carries `forecast_past_due` (see §5)
 
@@ -28,7 +28,7 @@ with domain rules baked in so callers don't have to rediscover them.
 - `schedule_breakdown` — counts/averages by agency/sponsor/borough/phase/category. An explicit `period` is validated (off-cadence or absent periods error — no silent empty results). For `metric='schedule_variance'`, `statistic` ∈ {count, mean, median, sum, min, max} — anything else errors (no silent fallback); `count` results carry no direction (unsigned). Variance statistics exclude forecast-placeholder artifacts (|variance| > 36,500 days — the guard shared with `rank_projects`) and echo the dropped count as `excluded_artifacts`. Category grouping counts a PID once in EACH of its line-derived categories (non-additive, caveat in-band)
 - `schedule_changes` — newly completed / newly delayed between two periods. BOTH change types compare `from_period` → `to_period` ("newly delayed" = positive variance at `to`, none at `from`). Periods are validated: off-cadence, inverted, or missing-`to_period` values error; a `from_period` predating the data is allowed and noted; rows carry `agency_project_name`
 - `delay_reason_stats` — distribution of delay reasons; an explicit `period` is validated (off-cadence or absent periods error — no silent empty results), except the `scope='all_history'` path which skips periods; the answer carries `coverage` (delayed_total / with_reason / without_reason) so the distribution has a denominator. Coverage counts delayed rows by bare `variance_day>0` — the same count basis as `schedule_breakdown`'s `count` metric (no artifact-day guard, which applies only to day-valued statistics)
-- `project_duration_stats` — duration between two actual milestones; optional `group_by` (`managing_agency` | `borough` | `lifecycle_status`) returns per-group stats
+- `project_duration_stats` — forward duration from actual design start to actual construction end, using latest-known PID dates. Reversed or identical milestones error. Negative intervals remain inspectable in `invalid_intervals` and are excluded from statistics. `population_total = n_projects + excluded_missing_dates + excluded_invalid_order`, also within each optional agency/borough/lifecycle group
 
 **Budget analytics**
 - `budget_breakdown` — budget/spend by agency or category, deduped on (fms_id, managing_agency); an explicit `period` is validated (off-cadence or absent periods error — no silent empty results); category is line-grain via `category_dim` (one category per line — additive)
@@ -44,14 +44,49 @@ with domain rules baked in so callers don't have to rediscover them.
 - `run_sql` — read-only SELECT against the DuckDB; `inline` / `csv` / `xlsx` export. Each export writes a fresh uniquely-named file under `exports/`. All three modes enforce the same query timeout (`RUN_SQL_TIMEOUT_SECONDS`, 30s) — a runaway query is interrupted, not left to hang. The read-only guard ignores string literals and comments (a literal `'%update%'` is fine), and its rejection message steers DESCRIBE/SHOW/PRAGMA callers to `describe_table`; xlsx stringifies LIST/STRUCT cells. The docstring steers callers to the TYPED tables first and carries the two grain rules (budget comparisons key on `(managing_agency, fms_id)`; sponsor-scoped budget sums use the `fms_sponsor` semi-join, never a value-bearing join). Every inline result echoes `latest_reporting_period`, and adds a `period_basis_note` when the query counts an all-history dimension (`fms_location` / `fms_sponsor` / `lifetime_budget_variance`) — those have no `reporting_period` column, so a raw count spans all periods, not one; truncated inline results carry a `truncation_note` steering to `output='csv'`
 
 All tools carry MCP `ToolAnnotations` (read-only + idempotent; `run_sql` flagged non-idempotent for its export file writes).
+All 18 tools publish typed success `outputSchema` definitions and return matching
+`structuredContent` and serialized JSON text. Choice fields use enumerated inputs;
+listing limits are bounded integers. Shared tool validation rejects invalid choices,
+roles and parameter combinations. Expected business/validation failures set MCP
+`isError=true`, including unknown identifiers and absent comparison snapshots.
+
+`rank_projects` and `project_portfolio` expose `population_scope='latest_known'`
+(compatible default: each entity's own latest observation) or `'current'` (values
+from the selected complete snapshot). Rows include `reporting_period` and
+`present_in_current_snapshot`; responses identify `current_period`. Current scope
+uses snapshot schedule/budget values and funding, with cumulative schedule variance
+stopping at that period. Latest-known presence flags test membership in the complete
+snapshot even if a newer partial snapshot also contains the entity. Schedule category
+filters use that state's current funding links by default; `category_scope='all_history'`
+explicitly includes former memberships. Budget categories remain one per full line key.
+Current budget rankings derive sponsor ownership and delayed-project filters from
+the independently selected complete schedule snapshot, using full budget-line keys;
+they echo the schedule ownership/filter period when it differs from the budget period.
+
+`schedule_breakdown(metric='count')` requires `statistic='count'`. Schedule changes
+allow an empty baseline only when it strictly predates the earliest available
+snapshot; an absent interior baseline errors and lists available periods. A PID
+absent from an otherwise valid snapshot retains the documented change semantics.
+Budget comparisons reject malformed/off-cadence periods and retain null deltas for
+valid periods with no data.
+
+`run_sql` query connections disable external file/network access and automatic
+extension installation/loading, with that configuration locked before queries run.
+CSV and XLSX files are written by application code to controlled export paths;
+submitted SQL receives no filesystem permission for exports.
+
+Budget `delayed_only` rankings match the complete `(managing_agency, fms_id)` key
+against each delayed PID's **own latest link-period** funding set. Removed links
+and another holder's same-ID line are excluded; shared current funding counts once.
 
 ## 2. Core model: PID vs FMS, and the many-to-many relationship
 
 - **PID = a SCHEDULE** (what's built and when); **FMS ID = a BUDGET** (a funding source).
 - **They are many-to-many:** one FMS ID may fund several PIDs; one PID may be funded by
   several FMS IDs. Most are 1:1; ~3% fan out — **list all, never silently pick one.**
-- **Directionally asymmetric.** Every PID has **≥1 FMS** ("no budget, no work" — 0 PIDs
-  lack a budget at 202601). The reverse fails often: **~45% of budget lines have no
+- **Directionally asymmetric.** Dashboard PIDs ordinarily have funding links (0 PIDs
+  lack a budget at 202601). Source-only schedules and historical exceptions can lack
+  a matching dashboard edge. The reverse fails often: **~45% of budget lines have no
   schedule** (2,497 of 5,490 in the join at 202601), because a budget can exist before its
   project reaches **Design** (when schedule reporting starts) and pass-through / expense /
   certain line types never require a schedule. A budget with no PID is **normal, not missing
@@ -100,13 +135,22 @@ These four raw datasets are normalized into the tables in §6.
 - **21 program/facility categories** (Library, Parks & Recreation, Sewer & Water, Bridges,
   Streets & Highways, Jails & Correction, …), materialized once into `category_dim` from
   the curated `data/categories.yaml`.
-- **Three signals — never `managing_agency` or project name** (which reassign / undercount):
+- **Three primary signals** (project names and current holders can reassign / undercount):
   `ten_year_plan_category` keyword, fms-id/budget-line prefix (LB/LN/LQ, HB/BR, WP/WM/SE…),
   and `sponsor_agency`.
 - **Three-tier precedence:** specific keyword/prefix → **sponsor routing** → generic
   facility keyword → `Other / Uncategorized`.
+- **Category grain is `(managing_agency, fms_id)`.** Each line uses its own latest
+  nonempty ten-year labels and sponsors, resolved independently by attribute.
+  All values tied at that period are eligible: match any label or atomic owner,
+  then resolve conflicts by taxonomy tier and YAML file order. Source row order
+  never selects a winner. Comma-separated sponsors are trimmed and normalized to
+  uppercase; co-owners use the same precedence. If no sponsor is known, only that
+  line's holder supplies the sponsor-tier fallback. Labels and ordinary owners
+  never transfer to another holder's line. Category joins require both key columns.
 - **Sponsor drives the type for institution categories.** Owner-authoritative categories
-  declare `ever_managed_by` (all-history; survives budget-holder reassignment). Applied to
+  declare `ever_managed_by` (all-history across holders of an FMS ID; survives
+  budget-holder reassignment). This is the deliberate exception to line-local signals. Applied to
   **Library** (BPL/NYPL/QPL/NYRL) and **Cultural Institutions** (DCLA). Consequences:
   - A DCLA energy retrofit rolls up to **Cultural**, not Energy.
   - A DEP green-infrastructure project (e.g. Tibbetts Brook daylighting, a CSO/stormwater
@@ -159,8 +203,9 @@ These four raw datasets are normalized into the tables in §6.
 
 - **Neutral, signed reporting** — "moved 45 days later", "budget grew $2.1M"; never echo
   loaded words ("slippage", "overrun"), which map only to the increasing side.
-- **Presence = the active flag** — every project here is a currently-reportable active
-  capital project; there is no separate status flag.
+- **Presence is period-specific** — presence in a selected snapshot means reportable
+  at that period. A historical or latest-known row does not prove current presence;
+  there is no separate active flag.
 - **Lifecycle & reporting obligation.** Phases run **Pre-Design → Design → Construction
   Procurement → Construction → Close-out**. A **schedule (PID) is reported only from the
   start of Design through the end of Construction** — Pre-Design and Close-out carry no
@@ -170,7 +215,7 @@ These four raw datasets are normalized into the tables in §6.
   construction — so a finished project (`lifecycle_status = 'completed'`) **stays present,
   sometimes for years**, because its budget line is still open. *Completed-but-present is
   normal:* presence means an active budget line, not active construction — never read a
-  present project as work-in-progress. (At 202601, ~1,221 present PIDs are already
+  present project as work-in-progress. (In the 202601 dashboard snapshot, 755 PIDs are
   `completed`.)
 - **Reporting cadence ends 01/05/09** (Jan/May/Sep) — the whole report publishes **3×/year,
   mandated by the City's Commitment Plan**; **spend reports only those periods.**
@@ -197,18 +242,20 @@ These four raw datasets are normalized into the tables in §6.
   whose "their projects" defaults to *sponsor*.)
 - **Schedule history is floored at 202305** (the window's first period) — cumulative
   slippage before that is truncated (a floor, not the true project baseline).
-- **Variance is period-over-period by default**; cumulative = telescoped sum of per-period
-  variance = latest forecast minus earliest reported forecast.
+- **Variance is period-over-period by default**; cumulative sums the available,
+  artifact-guarded variance observations in the stated schedule universe. Because
+  source observations can be omitted from the dashboard, that sum need not equal
+  the native source's lifetime total or a simple endpoint subtraction. Cumulative
+  rankings explicitly label this basis.
 - Partner-managed / budget-only (no-PID) FMS lines are normal on the budget side.
 - Some categories are filtered out upstream before publication — the datasets carry
   only the city's "reportable" set.
 - **Parenthesized `current_phase` values are no-schedule REASONS, not phases**:
-  they appear only when no schedule (PID) was reported for that
-  line. `(Completed)`/`(Closeout)` = finished before an update was requested; reason
-  values naming an active phase (`(Design)`, `(Construction)`, `(Initiation)`) are
-  upstream data-entry errors. They occur only on NULL-PID rows, so they never enter
-  `schedule_history`. Where a PID's FMS rows disagree on phase (86 historical
-  PID-periods), the displayed phase prefers the real phase; `lifecycle_status` is the
+  typically used where a line has no reported schedule, with historical exceptions
+  on rows that have a PID. They remain verbatim before display-phase normalization,
+  including `(Pre-Design)`, `(Design)`, `(Construction)` and `(Closeout)`.
+  Where a PID's FMS rows disagree, the displayed phase prefers a real phase over
+  a parenthesized reason; `lifecycle_status` is the
   authoritative completion signal and may legitimately differ from the displayed phase.
 - **Suppression rule (precise):** forecasts and most actual milestones publish NULL
   when the PID is design-build, in Pre-Design, or all its lines carry a non-exempt
@@ -235,16 +282,49 @@ These four raw datasets are normalized into the tables in §6.
   `schedule_budget_link`, `project_budget_fy`) + analytics rollups
   (`latest_project_state`, `cumulative_schedule_variance`, `lifetime_budget_variance`,
   `agency_rollup_by_period`, `pid_funding`, `fms_sponsor`, `fms_location`,
-  `original_budget`) + dimensions (`agency_dim`,
-  `category_dim`, `meta`). `fms_sponsor` (`fms_id → sponsor_agency`) is a precomputed
+  `original_budget`, `source_schedule_history`, `schedule_source_coverage`) + dimensions
+  and metadata (`agency_dim`, `category_dim`, `meta`, `data_build`). `fms_sponsor` (`fms_id → sponsor_agency`) is a precomputed
   owner-attribution index for the budget side (see §4).
+- **Schedule universe:** schedule statistics retain the dashboard-aligned fb86
+  PID/period spine. `source_schedule_history` retains all native 95tx observations,
+  with `in_dashboard`; `schedule_source_coverage` reconciles matched, source-only
+  and dashboard-only rows by PID, latest periods and both cumulative variance bases.
+  Schedule MCP answers state this universe and carry coverage; PID detail/history
+  makes omitted observations inspectable, including wholly source-only PIDs.
+  `dataset_info.available_periods` follows each independent typed source, not a shared
+  dashboard period list.
 - **Atomic-swap ingest** (build a shadow DB, then atomically replace) so the live server
-  never reads a half-built database.
+  never reads a half-built database. Publication requires a valid, checkpointed,
+  closed shadow on the same filesystem. The live image must also be checkpointed
+  and read-only; an active writer or WAL prevents backup/publication. A per-target
+  OS lock serializes publishers;
+  an overlapping publication fails with a retry message. A complete backup is staged
+  and installed as `.bak` while the live path remains available, followed by one
+  `os.replace(shadow, live)`. Failure before publication preserves live and shadow;
+  `.bak` may then equal live. Retry the retained shadow, or copy `.bak` to a fresh
+  shadow for rollback. Existing readers finish on their old image; same-process
+  DuckDB connections may retain that image until all old connections close.
+- **Ingest isolation and health:** a separate per-target OS lock covers the entire
+  ingest/rematerialize operation, rejecting overlap before downloads. Each run owns
+  a unique directory and shadow. Every parsed CSV page must match the declared
+  header and row width; stable metadata revisions and source row counts bracket
+  downloading. Before materialization/publication, health checks validate counts,
+  required keys, duplicate declared source keys and reporting-period coverage,
+  including disappeared prior snapshots and a partial newest snapshot. Original-budget
+  adoption months remain separate. Different complete periods across sources are
+  allowed with a warning. Failed runs retain their own downloads/shadow and diagnostic
+  report; successful runs retain the before/after health report.
+- **Schema version 4** includes the category dimension's complete budget-line key,
+  source schedule reconciliation and completed build identity.
+  Existing databases must be rebuilt before the new server can serve them; the
+  schema guard reports an actionable error for older builds.
 - **Curated dictionaries:** `data/agencies.yaml` (agencies), `data/categories.yaml`
   (program categories), and `data/data_dictionary.yaml` (field definitions), each loaded
   at build time; plus `data/tables.yaml` — the `describe_table` catalog (grain / keying /
   column notes) — which is loaded at CALL time (not build time) and overlaid on live
-  `information_schema` columns.
+  `information_schema` columns. These four YAML files and `fms_agency_dim.tsv` are
+  bundled in the wheel and loaded through package resources outside a checkout;
+  source checkouts continue to edit `data/` directly.
 - **Field definitions:** `data/data_dictionary.yaml` is a one-time extract of the dataset's
   official NYC Open Data data-dictionary XLSX → the `column_dict` table, surfaced via
   `describe_field` and folded into `dataset_info`. Static/curated (re-extract by hand on a
@@ -252,13 +332,41 @@ These four raw datasets are normalized into the tables in §6.
   in sync with the table schema; an upstream source-schema change (including a column
   REORDER, which `read_csv(columns=…)` would otherwise map positionally and silently
   scramble) fails the ingest via the header-order assertion in `load_raw_csv`.
-- **Every answer carries a provenance block** with a self-contained `reproduce_sql`.
-- **CSV / XLSX export** via `run_sql`.
+- **Reproducible answers:** query answers supply self-contained `reproduce_sql` and
+  component SQL where a response uses several queries: portfolio rows/full summary/
+  deduplicated budget, history snapshots/adoption headers/current state/links, and
+  resolver totals. Every MCP success and export carries a completed `data_build`
+  identity, source revisions and reporting periods. Static catalog text identifies its
+  curated source instead of claiming a SQL-only reproduction. Build identity hashes
+  the schema, materialization code, curated resources and source revisions; a rule
+  change is detectable independently of upstream timestamps.
+  The fingerprint is captured before materialization and checked again before
+  stamping; changed rules abort publication. A diagnostic or cleanup failure after
+  successful publication is reported as a warning without mislabeling the committed
+  database update as a failure.
+- **Safe rematerialization:** `od-cpd rematerialize` validates complete local raw
+  inputs, rebuilds an isolated shadow and atomically publishes without downloading.
+  It preserves source-ingestion timestamps. `update` chooses this path when rules
+  changed but source revisions did not. Reconnect stdio clients after code changes.
+- **Freshness:** `status` is explicitly local-only. `status --check-upstream` compares
+  revisions with Socrata and separately reports ingestion time, source revision,
+  complete/observed reporting periods and partial-publication warnings. Results
+  distinguish newer revisions, verified up-to-date data, unreachable sources and
+  inconclusive checks when a source changes during verification.
+- **CSV / XLSX export** via `run_sql`: CSV preserves DuckDB text values and formula-like
+  source strings, with quoted empty strings distinct from unquoted NULLs; it does not
+  alter values for spreadsheet interpretation. CSV provenance is saved in an adjacent
+  JSON sidecar. XLSX writes all string cells, headers and methodology as literal text,
+  including formula/error-looking values, while preserving numeric/date cells.
 - **Golden evals:** `tests/evals/` replays real analytical questions through the tool
   functions against the live DB, asserting headline numbers AND rule conveyance
   (M:M list-all, signed envelopes, agency_scope, variance basis). Pinned to one
   snapshot period; skips (with a re-pin pointer) after a newer ingest — see
   `tests/evals/README.md`.
+- **Pull-request CI:** a locked Python 3.12/3.14 matrix runs deterministic synthetic
+  behavior tests, exact 18-tool inventory/schema checks, a real stdio protocol test
+  and an isolated installed-wheel test. Missing or stale snapshot golden coverage is
+  explicit in pytest's skip summary; core contract tests require no local database.
 - **Every published column is keyed to a specific entity** (budget line, PID,
   pair, or snapshot); the materialization in `src/od_cpd/materialize.py`
   encodes those keying assumptions.

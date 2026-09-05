@@ -5,11 +5,12 @@ import duckdb
 
 from ..agencies import SCHEDULE_EXECUTORS
 from ..data_dictionary import load_dictionary
+from ..coverage import schedule_coverage
 from ..dbio import rows_as_dicts
 from ..primer import DOMAIN_RULES
-from ..provenance import source_descriptor
+from ..provenance import provenance_block, source_descriptor
 from ..table_catalog import load_table_catalog
-from ._common import ILIKE_ESC, LIKE_ESC, escape_like
+from ._common import ILIKE_ESC, LIKE_ESC, current_period, escape_like, interpolate_sql, resolve_period
 
 
 def _table_exists(con: duckdb.DuckDBPyConnection, name: str) -> bool:
@@ -33,9 +34,9 @@ def _columns_by_sid(con: duckdb.DuckDBPyConnection) -> dict[str, list]:
 # in original_budget, never reporting snapshots).
 _PERIOD_SOURCES = {
     "raw_project_detail": ("schedule_history", None),
-    "raw_schedule_history": ("schedule_history",
-        "Periods via schedule_history, whose period spine is fb86 "
-        "(raw_project_detail) — identical lists today."),
+    "raw_schedule_history": ("source_schedule_history",
+        "Native schedule-source periods, including observations absent from the "
+        "dashboard-aligned schedule_history. See source_coverage for reconciliation."),
     "raw_budget_history": ("budget_history",
         "Snapshot periods only. Raw rows with NULL spend_to_date are original-budget "
         "ADOPTION records stamped with any calendar month (tracked in "
@@ -45,22 +46,26 @@ _PERIOD_SOURCES = {
 
 
 def dataset_info_from(con: duckdb.DuckDBPyConnection) -> dict:
-    datasets = rows_as_dicts(con, """
+    meta_sql = """
         SELECT dataset_id, period_column, row_count, latest_reporting_period,
                rows_updated_at, ingest_completed_at, fms_data_date, agency_data_date
         FROM meta ORDER BY dataset_id
-    """)
+    """
+    datasets = rows_as_dicts(con, meta_sql)
+    components = {"datasets": meta_sql}
     by_sid_source = {t.get("socrata_id"): _PERIOD_SOURCES[name]
                      for name, t in load_dictionary().items()
                      if name in _PERIOD_SOURCES}
-    period_cache: dict[str, list] = {}  # fb86 + 95tx share schedule_history: scan once
+    period_cache: dict[str, list] = {}
     for d in datasets:
         src = by_sid_source.get(d["dataset_id"])
         if src and _table_exists(con, src[0]):
             if src[0] not in period_cache:
-                period_cache[src[0]] = [r[0] for r in con.execute(
-                    f"SELECT DISTINCT reporting_period FROM {src[0]} ORDER BY 1").fetchall()]
+                sql = f"SELECT DISTINCT reporting_period FROM {src[0]} ORDER BY 1"
+                period_cache[src[0]] = [r[0] for r in con.execute(sql).fetchall()]
+                components[f"{src[0]}_periods"] = sql
             d["available_periods"] = period_cache[src[0]]
+            d["current_snapshot_period"] = current_period(con, src[0])
             if src[1]:
                 d["period_note"] = src[1]
     caveats = [
@@ -70,6 +75,8 @@ def dataset_info_from(con: duckdb.DuckDBPyConnection) -> dict:
         "managing_agency = executor on schedule rows, budget-holder on budget rows.",
         "available_periods lists each dataset's reporting snapshots (from the typed "
         "tables); qj5n adoption-month original-budget records are intentionally absent.",
+        "Source revisions, ingestion time and reporting periods are different clocks. "
+        "This response is local-only; od-cpd status --check-upstream compares Socrata revisions.",
     ]
     if _table_exists(con, "column_dict"):
         # fold a compact field dictionary into each dataset (full detail via describe_field)
@@ -77,6 +84,9 @@ def dataset_info_from(con: duckdb.DuckDBPyConnection) -> dict:
         for d in datasets:
             d["columns"] = by_sid.get(d["dataset_id"], [])
         caveats.append("Field definitions: per-dataset `columns` here, or call describe_field for full detail.")
+    coverage = schedule_coverage(con)
+    if coverage.get("reproduce_sql"):
+        components["source_coverage"] = coverage["reproduce_sql"]
     return {
         "datasets": datasets,
         "schedule_executors_count": len(SCHEDULE_EXECUTORS),
@@ -84,8 +94,13 @@ def dataset_info_from(con: duckdb.DuckDBPyConnection) -> dict:
         # still receive the domain rules through the first orienting call.
         "domain_rules": DOMAIN_RULES,
         "caveats": caveats,
+        "source_coverage": coverage,
+        "freshness_check": "local_only",
         "source": "meta table + column_dict",
         "reproduce_sql": None,
+        "provenance": provenance_block(definition="local source metadata and schedule coverage",
+            scope={"freshness_check": "local_only"}, row_count=len(datasets),
+            reproduce_sql=meta_sql, components=components),
     }
 
 
@@ -107,33 +122,41 @@ def describe_field_from(con: duckdb.DuckDBPyConnection, field: str | None = None
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY table_name, field_name"
+    fields = rows_as_dicts(con, sql, params)
     return {
-        "fields": rows_as_dicts(con, sql, params),
-        "provenance": source_descriptor(
-            "column_dict (data_dictionary.yaml; official NYC Open Data XLSX)"),
+        "fields": fields,
+        "provenance": provenance_block(definition="curated source field definitions",
+            scope={"field": field, "dataset": dataset}, row_count=len(fields),
+            reproduce_sql=interpolate_sql(sql, params)),
     }
 
 
 def list_categories_from(con: duckdb.DuckDBPyConnection) -> dict:
     """Program/facility categories with budget-line counts and total budget at the
-    latest period. Budget summed over budget_history rows (one per fms_id+agency),
-    each tagged by its fms_id's category — mirrors the coverage measure."""
-    rows = rows_as_dicts(con, """
+    selected complete period. Budget summed over budget_history rows (one per fms_id+agency),
+    each tagged by its complete budget-line key — mirrors the coverage measure."""
+    period, err = resolve_period(con, "budget_history", "current")
+    if err:
+        return err
+    sql = """
         SELECT c.category,
                count(*) AS n_budget_lines,
                round(sum(h.total_budget), 0) AS total_budget,
                round(100.0 * sum(h.total_budget)
                      / sum(sum(h.total_budget)) OVER (), 1) AS pct_budget
         FROM budget_history h
-        JOIN category_dim c USING (fms_id)
-        WHERE h.reporting_period = (SELECT max(reporting_period) FROM budget_history)
+        JOIN category_dim c USING (fms_id, managing_agency)
+        WHERE h.reporting_period = ?
         GROUP BY c.category
         ORDER BY total_budget DESC NULLS LAST
-    """)
+    """
+    rows = rows_as_dicts(con, sql, [period])
     return {
         "categories": rows,
-        "provenance": source_descriptor(
-            "category_dim (categories.yaml: ten-year + sponsor + fms-prefix classify)"),
+        "period": period,
+        "provenance": provenance_block(definition="category totals at the selected complete budget snapshot",
+            scope={"period": period, "dedup": "(managing_agency, fms_id)"},
+            row_count=len(rows), reproduce_sql=interpolate_sql(sql, [period])),
     }
 
 
@@ -152,7 +175,9 @@ def list_agencies_from(con: duckdb.DuckDBPyConnection, contains: str | None = No
     agencies = rows_as_dicts(con, sql, params)
     return {
         "agencies": agencies,
-        "provenance": source_descriptor("agency_dim (agencies.yaml + live intersection)"),
+        "provenance": provenance_block(definition="agency dictionary and live intersection",
+            scope={"contains": contains}, row_count=len(agencies),
+            reproduce_sql=interpolate_sql(sql, params)),
     }
 
 

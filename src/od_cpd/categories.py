@@ -1,6 +1,6 @@
 # src/od_cpd/categories.py
 """Program/facility category taxonomy: load categories.yaml, compile it to a
-DuckDB CASE expression, and materialize a category_dim(fms_id, category) table.
+DuckDB CASE expression, and materialize one category per (managing_agency, fms_id).
 
 Classification is a 3-tier precedence (see data/categories.yaml header):
   1. specific ten-year keyword / fms-id prefix / ever-managed-by (file order)
@@ -42,30 +42,32 @@ def category_names(rules: dict) -> list[str]:
     return [c["name"] for c in rules["categories"]] + [rules["other_label"]]
 
 
-def _keyword_conds(cat: dict, *, tyc: str, fms: str, ever_flags: dict[str, str]) -> list[str]:
+def _keyword_conds(cat: dict, *, tycs: str, fms: str, ever_flags: dict[str, str]) -> list[str]:
     conds: list[str] = []
     if cat.get("ever_managed_by"):
         conds.append(ever_flags[cat["name"]])
     for p in cat.get("fms_prefix") or []:
         conds.append(f"{fms} ILIKE {sql_literal(p + '%')}")
     for kw in cat.get("ten_year_any") or []:
-        conds.append(f"{tyc} ILIKE {sql_literal('%' + kw + '%')}")
+        conds.append(f"len([label FOR label IN {tycs} "
+                     f"IF label ILIKE {sql_literal('%' + kw + '%')}]) > 0")
     return conds
 
 
-def build_category_expr(rules: dict, *, tyc: str, fms: str, sponsor: str,
+def build_category_expr(rules: dict, *, tycs: str, fms: str, sponsors: str,
                         ever_flags: dict[str, str]) -> str:
     """Compile the taxonomy to a SQL expression yielding the category for one row.
     Precedence (first non-null): specific keyword/prefix → sponsor → generic keyword → other."""
     cats = rules["categories"]
     specific_whens, generic_whens = [], []
     for c in cats:
-        conds = _keyword_conds(c, tyc=tyc, fms=fms, ever_flags=ever_flags)
+        conds = _keyword_conds(c, tycs=tycs, fms=fms, ever_flags=ever_flags)
         if not conds:
             continue
         when = f"WHEN ({' OR '.join(conds)}) THEN {sql_literal(c['name'])}"
         (generic_whens if c.get("generic") else specific_whens).append(when)
-    sponsor_whens = [f"WHEN {sponsor} = {sql_literal(a)} THEN {sql_literal(c['name'])}"
+    sponsor_whens = [f"WHEN list_contains({sponsors}, {sql_literal(a)}) "
+                     f"THEN {sql_literal(c['name'])}"
                      for c in cats for a in (c.get("sponsor_agencies") or [])]
 
     parts = [f"CASE {' '.join(whens)} END"
@@ -75,12 +77,15 @@ def build_category_expr(rules: dict, *, tyc: str, fms: str, sponsor: str,
 
 
 def build_category_dim(con: duckdb.DuckDBPyConnection, *, rules: dict | None = None) -> None:
-    """CREATE OR REPLACE category_dim(fms_id, category) at the fms_id grain.
+    """Build category_dim at the (managing_agency, fms_id) budget-line grain.
 
-    Reads only RAW tables, so it runs any time after raw load. ten_year_plan_category
-    and sponsor are taken from each fms_id's latest project_detail row. Each
-    owner-authoritative category gets its own all-history membership flag (ever_N) so
-    a reassigned line keeps its category and two declarers (Library, Cultural) don't collide.
+    Keep all values tied at each attribute's latest nonempty period for that line.
+    Match any tied label/atomic sponsor, then use taxonomy tier and file order to
+    resolve conflicts. Other holders' labels and ordinary sponsors never cross
+    the line key. Only declared institution-owner history carries across holders
+    of an FMS ID, preserving the existing reassignment rule.
+
+    Reads only RAW tables and runs after raw load is complete.
     """
     rules = rules or load_category_rules()
     ever_cats = [c for c in rules["categories"] if c.get("ever_managed_by")]
@@ -91,44 +96,60 @@ def build_category_dim(con: duckdb.DuckDBPyConnection, *, rules: dict | None = N
         ever_flags[c["name"]] = f"COALESCE(ef.ever_{i}, FALSE)"
     ever_select = ", ".join(flag_cols) if flag_cols else "FALSE AS ever_none"
 
-    # Detail sponsor where known, else the budget-holder (for budget-only lines with
-    # no project_detail row) — last resort, reached only by the sponsor tier.
+    # Without a known owner, use this line's holder as the sponsor-tier fallback.
     expr = build_category_expr(
-        rules, tyc="m.tyc", fms="d.fms_id",
-        sponsor="COALESCE(m.sponsor, bm.bud_managing)", ever_flags=ever_flags)
+        rules, tycs="t.tycs", fms="d.fms_id",
+        sponsors="COALESCE(s.sponsors, [d.managing_agency])", ever_flags=ever_flags)
     con.execute(f"""
         CREATE OR REPLACE TABLE category_dim AS
-        WITH meta AS (
-            SELECT fms_id,
-                   arg_max(ten_year_plan_category, reporting_period) AS tyc,
-                   arg_max(sponsor_agency, reporting_period)         AS sponsor
+        WITH detail AS (
+            SELECT fms_id, managing_agency, reporting_period,
+                   nullif(trim(ten_year_plan_category), '') AS tyc,
+                   sponsor_agency
             FROM raw_project_detail
             WHERE fms_id IS NOT NULL
-              AND (ten_year_plan_category IS NOT NULL OR sponsor_agency IS NOT NULL)
-            GROUP BY fms_id
         ),
-        bud_mgr AS (
-            SELECT fms_id, arg_max(managing_agency, year_month_reported) AS bud_managing
-            FROM raw_budget_history WHERE fms_id IS NOT NULL GROUP BY fms_id
+        sponsor_atoms AS (
+            SELECT fms_id, managing_agency, reporting_period, upper(trim(atom)) AS sponsor
+            FROM detail CROSS JOIN unnest(string_split(sponsor_agency, ',')) AS u(atom)
+            WHERE trim(atom) <> ''
+        ),
+        latest_labels AS (
+            SELECT fms_id, managing_agency, list(DISTINCT tyc ORDER BY tyc) AS tycs
+            FROM (
+                SELECT * FROM detail WHERE tyc IS NOT NULL
+                QUALIFY reporting_period = max(reporting_period) OVER
+                    (PARTITION BY fms_id, managing_agency)
+            ) GROUP BY fms_id, managing_agency
+        ),
+        latest_sponsors AS (
+            SELECT fms_id, managing_agency,
+                   list(DISTINCT sponsor ORDER BY sponsor) AS sponsors
+            FROM (
+                SELECT * FROM sponsor_atoms
+                QUALIFY reporting_period = max(reporting_period) OVER
+                    (PARTITION BY fms_id, managing_agency)
+            ) GROUP BY fms_id, managing_agency
         ),
         ever_flags AS (
             SELECT fms_id, {ever_select}
             FROM (
-                SELECT fms_id, managing_agency AS agency FROM raw_project_detail WHERE fms_id IS NOT NULL
+                SELECT fms_id, managing_agency AS agency FROM detail
                 UNION ALL
-                SELECT fms_id, sponsor_agency  AS agency FROM raw_project_detail WHERE fms_id IS NOT NULL
+                SELECT fms_id, sponsor AS agency FROM sponsor_atoms
                 UNION ALL
                 SELECT fms_id, managing_agency AS agency FROM raw_budget_history WHERE fms_id IS NOT NULL
             ) GROUP BY fms_id
         ),
         ids AS (
-            SELECT DISTINCT fms_id FROM raw_project_detail WHERE fms_id IS NOT NULL
+            SELECT fms_id, managing_agency FROM detail WHERE managing_agency IS NOT NULL
             UNION
-            SELECT DISTINCT fms_id FROM raw_budget_history WHERE fms_id IS NOT NULL
+            SELECT fms_id, managing_agency FROM raw_budget_history
+            WHERE fms_id IS NOT NULL AND managing_agency IS NOT NULL
         )
-        SELECT d.fms_id, {expr} AS category
+        SELECT d.fms_id, d.managing_agency, {expr} AS category
         FROM ids d
-        LEFT JOIN meta m        ON d.fms_id = m.fms_id
-        LEFT JOIN bud_mgr bm    ON d.fms_id = bm.fms_id
-        LEFT JOIN ever_flags ef ON d.fms_id = ef.fms_id
+        LEFT JOIN latest_labels t USING (fms_id, managing_agency)
+        LEFT JOIN latest_sponsors s USING (fms_id, managing_agency)
+        LEFT JOIN ever_flags ef USING (fms_id)
     """)
