@@ -23,6 +23,15 @@ DuckDB and asserts both the headline numbers AND the rule-conveyance artifacts
   counterparts, states the variance basis, scopes DOC by sponsor). Needs a
   model/budget/cadence decision.
 
+The deterministic stdio contract in `tests/test_mcp_protocol.py` additionally
+checks initialization instructions, tool-specific rule descriptions, required
+`interpretation_rules` output schemas and matching text/structured results for all
+18 tools. It makes a direct schedule call before `dataset_info`, so a client that
+ignores server instructions still receives the many-to-many and shared-funding
+guidance with the linked-budget evidence. These are delivery tests, not LLM-answer
+evaluations. Synthetic detail tests cover single forward links with reverse sharing
+in both directions, as well as budget-only records without a schedule.
+
 Run: `uv run --locked pytest -ra tests/evals/` (included in the default suite).
 The skip summary makes missing or mismatched snapshot coverage visible. PR CI
 always runs synthetic and real-stdio contract checks, even without a local DB.

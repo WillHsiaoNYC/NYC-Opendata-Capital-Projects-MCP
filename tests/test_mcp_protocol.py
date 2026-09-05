@@ -11,6 +11,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from od_cpd import materialize
+from od_cpd.primer import DOMAIN_RULES, PRIMER, RULES, TOOL_RULE_IDS, rules_for_tool
 from tests.test_materialize_normalized import _raw
 
 
@@ -59,9 +60,26 @@ def test_stdio_schemas_success_errors_and_saved_provenance(tmp_path):
         with anyio.fail_after(60):
             async with stdio_client(params) as (read, write):
                 async with ClientSession(read, write) as session:
-                    await session.initialize()
+                    initialized = await session.initialize()
+                    assert initialized.instructions == PRIMER
                     tools = {t.name: t for t in (await session.list_tools()).tools}
                     assert set(tools) == set(SUCCESS_CALLS)
+                    assert set(tools) == set(TOOL_RULE_IDS)
+                    for name, tool in tools.items():
+                        assert "interpretation_rules" in tool.outputSchema["required"], name
+                        for rule in rules_for_tool(name):
+                            assert rule["text"] in tool.description, (name, rule["id"])
+
+                    # A client can skip dataset_info and discard initialize.instructions.
+                    # Its first data call must still carry both evidence and interpretation.
+                    first = await session.call_tool("get_project_schedule", {"pid": "101"})
+                    assert not first.isError
+                    data = first.structuredContent
+                    assert {r["fms_id"] for r in data["linked_budgets"]} == {"A", "B"}
+                    assert "never collapse to one" in data["caveat"]
+                    by_id = {r["id"]: r["text"] for r in data["interpretation_rules"]}
+                    assert by_id["relationships"] == RULES["relationships"]
+                    assert "not an allocated share" in by_id["funding_totals"]
                     build_ids = set()
                     for name, arguments in SUCCESS_CALLS.items():
                         assert tools[name].outputSchema, name
@@ -72,7 +90,10 @@ def test_stdio_schemas_success_errors_and_saved_provenance(tmp_path):
                         validate(data, tools[name].outputSchema)
                         assert len(result.content) == 1
                         assert json.loads(result.content[0].text) == data, name
+                        assert data["interpretation_rules"] == rules_for_tool(name), name
                         build_ids.add(data["provenance"]["data_build"]["build_id"])
+                        if name == "dataset_info":
+                            assert data["domain_rules"] == DOMAIN_RULES
                         if name == "project_portfolio":
                             assert data["truncated"] and data["summary"]["n_projects"] == 2
                         if name == "get_project_history":

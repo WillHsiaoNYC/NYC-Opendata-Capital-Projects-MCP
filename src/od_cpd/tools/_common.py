@@ -208,16 +208,20 @@ def signed_metric(value, kind: str = "schedule") -> dict:
 def mm_envelope(*, anchor_type: str, anchor_id: str, linked: list[dict]) -> dict:
     """Build the M:M envelope. anchor_type ∈ {'schedule','budget'}.
 
-    Cardinality-scaled caveat (DR2): count==1 → light 1:1 note; count>1 → full M:M.
+    The anchor's link count does not establish its counterpart's reverse cardinality.
     """
     counterpart_key = "linked_budgets" if anchor_type == "schedule" else "linked_schedules"
-    other = "budget" if anchor_type == "schedule" else "schedule"
+    other = "budget line" if anchor_type == "schedule" else "schedule"
     n = len(linked)
     if n == 0:
-        caveat = f"No linked {other} found for this {anchor_type} in the latest period."
+        caveat = f"No linked {other} found for this {anchor_type}."
+        if anchor_type == "budget":
+            caveat += (" A budget without a linked schedule is normal and does not "
+                       "by itself indicate missing data.")
     elif n == 1:
-        caveat = (f"This {anchor_type} maps 1:1 to its counterpart. "
-                  "Most relationships are 1:1.")
+        reverse = "schedules" if anchor_type == "schedule" else "budget lines"
+        caveat = (f"This {anchor_type} has one linked {other} in its latest link set. "
+                  f"That counterpart may link to other {reverse}.")
     else:
         caveat = (f"This {anchor_type} fans out to {n} counterparts (many-to-many) — "
                   "all are listed; never collapse to one.")
