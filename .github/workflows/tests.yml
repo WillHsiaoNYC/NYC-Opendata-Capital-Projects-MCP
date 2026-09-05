@@ -21,8 +21,6 @@ jobs:
       fail-fast: false
       matrix:
         python: ["3.12", "3.14"]
-    env:
-      OD_CPD_HOME: ${{ runner.temp }}/od-cpd-runtime
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -33,5 +31,7 @@ jobs:
       - name: Install the locked environment
         run: uv sync --locked --dev
       - name: Synthetic, stdio, and isolated wheel regressions
+        env:
+          OD_CPD_HOME: ${{ runner.temp }}/od-cpd-runtime
         # No local database is supplied. -ra makes skipped snapshot goldens visible.
         run: uv run --locked pytest -ra -m "not smoke"
