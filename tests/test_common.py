@@ -50,12 +50,14 @@ def test_signed_metric():
     assert signed_metric(None) == {"value": None, "direction": None}
 
 
-def test_mm_envelope_count_one_light_caveat():
+def test_mm_envelope_count_one_describes_only_the_anchor_direction():
     env = mm_envelope(anchor_type="schedule", anchor_id="101",
                       linked=[{"fms_id": "ABC", "managing_agency": "DDC"}])
     assert env["anchor"] == {"type": "schedule", "id": "101"}
     assert env["linked_budgets"] == [{"fms_id": "ABC", "managing_agency": "DDC"}]
-    assert "1:1" in env["caveat"]
+    assert "one linked budget line" in env["caveat"]
+    assert "may link to other schedules" in env["caveat"]
+    assert "1:1" not in env["caveat"]
 
 
 def test_interpolate_sql_escapes_single_quotes():
@@ -71,3 +73,4 @@ def test_mm_envelope_fanout_lists_all():
                       linked=[{"pid": "1"}, {"pid": "2"}, {"pid": "3"}])
     assert env["linked_schedules"] == [{"pid": "1"}, {"pid": "2"}, {"pid": "3"}]
     assert "3" in env["caveat"]
+    assert "never collapse to one" in env["caveat"]

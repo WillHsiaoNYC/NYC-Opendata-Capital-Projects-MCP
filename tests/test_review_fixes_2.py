@@ -184,7 +184,8 @@ def _stale_link_db():
 def test_budget_links_use_latest_link_period_only():
     r = get_project_budget_from(_stale_link_db(), "A")
     assert {s["pid"] for s in r["linked_schedules"]} == {"101"}   # 999 dropped periods ago
-    assert "1:1" in r["caveat"]                                   # not a fabricated fan-out
+    assert "one linked schedule" in r["caveat"]                  # no fabricated fan-out
+    assert "1:1" not in r["caveat"]
 
 
 def test_budget_lookup_is_case_insensitive():

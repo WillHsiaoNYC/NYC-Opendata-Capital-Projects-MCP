@@ -39,6 +39,49 @@ def test_get_budget_lists_linked_schedules():
     assert any(s.get("pid") == "101" for s in r["linked_schedules"])
 
 
+def test_single_budget_for_schedule_does_not_claim_exclusive_relationship():
+    con = duckdb.connect(":memory:"); _raw(con)
+    # PID 103 has only A, while that same budget line also funds PID 101.
+    con.execute(
+        "INSERT INTO raw_project_detail (reporting_period, managing_agency, sponsor_agency,"
+        " pid, fms_id, total_budget, current_phase) "
+        "VALUES ('202601', 'DDC', 'DDC', '103', 'A', '100', 'Construction')")
+    materialize.materialize_all(con)
+    schedule = get_project_schedule_from(con, "103")
+    budget = get_project_budget_from(con, "A", "DDC")
+    assert schedule["linked_budgets"] == [{"fms_id": "A", "managing_agency": "DDC"}]
+    assert {row["pid"] for row in budget["linked_schedules"]} == {"101", "103"}
+    assert "one linked budget line" in schedule["caveat"]
+    assert "may link to other schedules" in schedule["caveat"]
+    assert "1:1" not in schedule["caveat"]
+
+
+def test_single_schedule_for_budget_does_not_claim_exclusive_relationship():
+    con = duckdb.connect(":memory:"); _raw(con); materialize.materialize_all(con)
+    # B funds only PID 101, but PID 101 is funded by both A and B.
+    budget = get_project_budget_from(con, "B", "DDC")
+    schedule = get_project_schedule_from(con, "101")
+    assert budget["linked_schedules"] == [{"pid": "101", "managing_agency": "DDC"}]
+    assert {row["fms_id"] for row in schedule["linked_budgets"]} == {"A", "B"}
+    assert "one linked schedule" in budget["caveat"]
+    assert "may link to other budget lines" in budget["caveat"]
+    assert "1:1" not in budget["caveat"]
+
+
+def test_budget_without_schedule_explains_normal_absence():
+    con = duckdb.connect(":memory:"); _raw(con)
+    con.execute(
+        "INSERT INTO raw_budget_history (managing_agency, fms_id, year_month_reported,"
+        " total_budget, spend_to_date) VALUES ('QPL', 'D', '202601', '300', '0')")
+    materialize.materialize_all(con)
+    budget = get_project_budget_from(con, "D", "QPL")
+    assert budget["answer"][0]["latest_budget"] == 300
+    assert budget["linked_schedules"] == []
+    assert "No linked schedule" in budget["caveat"]
+    assert "does not by itself indicate missing data" in budget["caveat"]
+    assert "latest period" not in budget["caveat"]
+
+
 def test_schedule_answer_carries_borough_and_list():
     con = duckdb.connect(":memory:"); _raw(con)
     con.executemany(

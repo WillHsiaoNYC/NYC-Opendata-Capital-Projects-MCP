@@ -24,10 +24,16 @@ RankMetric = Literal["period_variance_days", "cumulative_variance_days", "total_
 Row = dict[str, Any]
 
 
+class InterpretationRule(BaseModel):
+    id: str = Field(description="Stable identifier of the domain rule.")
+    text: str = Field(description="Guidance for interpreting and reporting this tool's result.")
+
+
 class Success(BaseModel):
     # Preserve existing and future response fields in both JSON representations.
     model_config = ConfigDict(extra="allow")
     provenance: Row
+    interpretation_rules: list[InterpretationRule]
 
     def model_dump(self, **kwargs):
         # Optional fields absent in the legacy JSON text stay absent in structuredContent.

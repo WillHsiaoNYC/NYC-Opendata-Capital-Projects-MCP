@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from functools import wraps
 from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
@@ -12,7 +13,7 @@ from . import contracts as C
 from .coverage import attach_schedule_coverage
 from .dbio import ro_conn, DBMissingError
 from .export import write_csv, write_xlsx
-from .primer import PRIMER
+from .primer import PRIMER, rules_for_tool
 from .provenance import enrich_provenance
 from .tools import lookup
 from .tools.sql import run_sql_on, validate_select
@@ -38,7 +39,22 @@ _RUN_SQL_NOTES = ToolAnnotations(readOnlyHint=False, destructiveHint=False,
                                  idempotentHint=False, openWorldHint=False)
 
 
-@mcp.tool(annotations=_RUN_SQL_NOTES)
+def _domain_tool(*, annotations: ToolAnnotations):
+    """Publish the same scoped rules in discovery and every successful result."""
+    def register(fn):
+        rules = rules_for_tool(fn.__name__)
+        description = (fn.__doc__ or "").strip() + "\n\nInterpretation rules:\n" + "\n".join(
+            f"- [{rule['id']}] {rule['text']}" for rule in rules)
+
+        @wraps(fn)
+        def with_rules(*args, **kwargs):
+            return {**fn(*args, **kwargs), "interpretation_rules": rules_for_tool(fn.__name__)}
+
+        return mcp.tool(description=description, annotations=annotations)(with_rules)
+    return register
+
+
+@_domain_tool(annotations=_RUN_SQL_NOTES)
 def run_sql(query: str, output: Literal["inline", "csv", "xlsx"] = "inline") -> C.SQLResult:
     """Run a read-only SELECT against the local CPD DuckDB.
 
@@ -53,18 +69,9 @@ def run_sql(query: str, output: Literal["inline", "csv", "xlsx"] = "inline") -> 
     category_dim, agency_dim, project_budget_fy, meta, data_build,
     source_schedule_history (95tx-native observations, in_dashboard flag),
     schedule_source_coverage (PID-level reconciliation and both cumulative bases).
-    GRAIN RULES: budget comparisons key on (managing_agency, fms_id) — never fms_id
-    alone; sponsor-scoped budget sums use the semi-join
-    fms_id IN (SELECT fms_id FROM fms_sponsor WHERE sponsor_agency = ...) — a
-    value-bearing JOIN fans out across a line's agency rows and double-counts.
-    PERIOD BASIS: fms_location, fms_sponsor, lifetime_budget_variance are ALL-HISTORY
-    dimensions (latest row per line/owner, NO reporting_period column) — JOIN them to
-    enrich or for lifetime figures; do NOT COUNT them as a single period's inventory.
-    For a period count, aggregate raw_project_detail / schedule_history / budget_history
-    filtered by reporting_period. Every result echoes latest_reporting_period (and warns
-    via period_basis_note when a query counts an all-history dim) — state the basis.
     RAW mirrors (raw_project_detail, raw_budget_fy, raw_budget_history,
-    raw_schedule_history) are all VARCHAR — cast as needed.
+    raw_schedule_history) are all VARCHAR. Inline results echo latest_reporting_period
+    and may carry period_basis_note and truncation_note.
     """
     try:
         with ro_conn() as con:
@@ -104,19 +111,19 @@ def _with_conn(fn, *args, **kwargs):
         raise ToolError(str(e)) from e
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def dataset_info() -> C.DatasetInfoResult:
     """Per-dataset freshness, current period, row counts, and the key caveats."""
     return _with_conn(lookup.dataset_info_from)
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def list_agencies(contains: str | None = None) -> C.AgenciesResult:
     """Agency dictionary with live CPD presence + schedule-executor flag."""
     return _with_conn(lookup.list_agencies_from, contains=contains)
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def list_categories() -> C.CategoriesResult:
     """Program/facility categories (Library, Parks & Recreation, Sewer & Water, …)
     with budget-line counts and total budget. Use a category name as the `category`
@@ -125,7 +132,7 @@ def list_categories() -> C.CategoriesResult:
     return _with_conn(lookup.list_categories_from)
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def describe_field(field: str | None = None, dataset: str | None = None) -> C.FieldsResult:
     """Official field definitions (the NYC Open Data data dictionary): description,
     allowed values, primary/foreign key, limitations, notes. Filter by `field` (column
@@ -134,7 +141,7 @@ def describe_field(field: str | None = None, dataset: str | None = None) -> C.Fi
     return _with_conn(lookup.describe_field_from, field, dataset)
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def describe_table(table: str | None = None) -> C.TableResult:
     """Schema catalog for every queryable DuckDB table (typed analytics tables, dims,
     raw mirrors): live columns + types plus curated grain and keying notes. No arg →
@@ -144,7 +151,7 @@ def describe_table(table: str | None = None) -> C.TableResult:
     return _with_conn(lookup.describe_table_from, table)
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def resolve_project_reference(query: C.Identifier, limit: C.RowLimit = 50,
                               offset: C.Offset = 0) -> C.ResolutionResult:
     """Resolve any project identifier (PID, FMS ID, name, partial) → schedule+budget
@@ -152,7 +159,7 @@ def resolve_project_reference(query: C.Identifier, limit: C.RowLimit = 50,
     return _with_conn(resolve_from, query, limit, offset)
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def get_project_schedule(pid: C.Identifier) -> C.ScheduleResult:
     """Schedule (PID): phase, lifecycle, signed variance, reason; lists linked budgets;
     `forecast_past_due` flags a forecast already past as of the PID's own latest report
@@ -160,14 +167,14 @@ def get_project_schedule(pid: C.Identifier) -> C.ScheduleResult:
     return _with_conn(get_project_schedule_from, pid)
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def get_project_budget(fms_id: C.Identifier, managing_agency: str | None = None) -> C.BudgetResult:
     """Budget (FMS line): total, spend, variance; lists linked schedules. NB budget has
     no 'completed' state; spend%=100 ≠ done."""
     return _with_conn(get_project_budget_from, fms_id, managing_agency)
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def get_project_history(pid: C.Identifier | None = None, fms_id: C.Identifier | None = None,
                         managing_agency: str | None = None) -> C.HistoryResult:
     """Period-by-period history for ONE project. Schedule lens (pid=…): each period's
@@ -181,7 +188,7 @@ def get_project_history(pid: C.Identifier | None = None, fms_id: C.Identifier | 
     return _with_conn(get_project_history_from, pid, fms_id, managing_agency)
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def schedule_breakdown(group_by: C.ScheduleGroup, metric: C.ScheduleMetric = "count", statistic: C.Statistic = "count",
                        period: str = "current", agency: str | None = None,
                        agency_role: C.AgencyRole = "auto") -> C.BreakdownResult:
@@ -194,7 +201,7 @@ def schedule_breakdown(group_by: C.ScheduleGroup, metric: C.ScheduleMetric = "co
                       agency, agency_role)
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def schedule_changes(change_type: Literal["completed", "delayed"], from_period: str, to_period: str,
                      agency: str | None = None, include_cancelled: bool = False,
                      agency_role: C.AgencyRole = "auto") -> C.ChangesResult:
@@ -204,7 +211,7 @@ def schedule_changes(change_type: Literal["completed", "delayed"], from_period: 
                       agency, include_cancelled, agency_role)
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def delay_reason_stats(period: str = "current", agency: str | None = None,
                        scope: Literal["current", "all_history"] = "current", agency_role: C.AgencyRole = "auto") -> C.ReasonsResult:
     """Distribution of reason-for-delay (only populated when variance>0). Defaults to current
@@ -215,7 +222,7 @@ def delay_reason_stats(period: str = "current", agency: str | None = None,
     return _with_conn(delay_reason_stats_from, period, agency, scope, agency_role)
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def budget_breakdown(group_by: C.BudgetGroup = "managing_agency", metric: C.BudgetMetric = "total_budget",
                      period: str = "current", agency: str | None = None,
                      agency_role: C.AgencyRole = "auto") -> C.BreakdownResult:
@@ -226,7 +233,7 @@ def budget_breakdown(group_by: C.BudgetGroup = "managing_agency", metric: C.Budg
     return _with_conn(budget_breakdown_from, group_by, metric, period, agency, agency_role)
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def budget_change(target: str, from_period: str, to_period: str,
                   metric: C.BudgetMetric = "total_budget", agency_role: C.AgencyRole = "auto",
                   managing_agency: str | None = None) -> C.BudgetChangeResult:
@@ -239,7 +246,7 @@ def budget_change(target: str, from_period: str, to_period: str,
                       agency_role, managing_agency)
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def rank_projects(entity: Literal["schedule", "budget"], rank_by: C.RankMetric, n: C.RowLimit = 10, direction: Literal["top", "bottom"] = "top",
                   min_total_budget: float | None = None, max_total_budget: float | None = None,
                   delayed_only: bool = False, category: str | None = None,
@@ -264,7 +271,7 @@ def rank_projects(entity: Literal["schedule", "budget"], rank_by: C.RankMetric, 
                       agency, agency_role, population_scope, category_scope)
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def project_duration_stats(from_milestone: C.Milestone = "actual_design_start",
                            to_milestone: C.Milestone = "actual_construction_end",
                            group_by: C.DurationGroup | None = None) -> C.DurationResult:
@@ -276,7 +283,7 @@ def project_duration_stats(from_milestone: C.Milestone = "actual_design_start",
     return _with_conn(project_duration_stats_from, from_milestone, to_milestone, group_by)
 
 
-@mcp.tool(annotations=_READONLY)
+@_domain_tool(annotations=_READONLY)
 def project_portfolio(category: str | None = None, borough: str | None = None,
                       community_board: str | None = None,
                       lifecycle_status: C.Lifecycle | None = None,
