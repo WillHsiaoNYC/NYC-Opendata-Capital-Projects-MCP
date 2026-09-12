@@ -89,9 +89,11 @@ coding agent like Cursor.
 Install the MCP server at
 https://github.com/WillHsiaoNYC/NYC-Opendata-Capital-Projects-MCP on this
 machine — follow its README to clone the repo, install it with uv, run
-`od-cpd init` to download the four NYC Open Data datasets into a local
-database, and wire it into my MCP client config. Then run a verification
-query to confirm it works.
+`od-cpd init --source opendata` to download all four datasets into a local
+database, and wire it into my MCP client config. If Open Data downloads
+fail, explain the GitHub snapshot fallback and ask before switching to
+`--source github`. Report the source, snapshot download date when applicable,
+and loaded reporting periods. Then run a verification query to confirm it works.
 ```
 
 **What "done" looks like:** your AI reports the loaded reporting period (e.g.
@@ -128,6 +130,39 @@ uv run od-cpd status      # confirm the loaded reporting period
 Optional: set `OD_CPD_SOCRATA_APP_TOKEN` to a free
 [Socrata app token](https://dev.socrata.com/docs/app-tokens) to avoid
 anonymous rate limits during ingest.
+
+### Choosing a download source
+
+NYC Open Data is the default and supplies the current published files. The
+installer downloads complete CSVs through Socrata's v3 export service with
+bounded retries. It explicitly selects every native column as text to preserve
+values; ordinary website exports can format or round currency, percentages, and
+dates. Metadata validates the fields and maps headers automatically. Users and
+installing agents do not need to rename columns or transform values.
+
+```bash
+uv run od-cpd init --source opendata
+uv run od-cpd init --source github                   # release tag data-latest
+uv run od-cpd init --source github --release TAG     # choose a dated snapshot
+```
+
+GitHub snapshots are release attachments in **this repository**, not files in
+Git history. The default `data-latest` tag is a maintainer-managed data snapshot;
+it does not mean GitHub's latest software release. A snapshot can be older than
+Open Data. Check its download date and reporting periods before choosing it.
+The GitHub path needs no live Socrata access: its manifest supplies source
+metadata, field mappings, row counts, byte counts, and SHA-256 checksums. Downloads
+are pinned to release asset IDs in this repository. Both sources pass schema,
+completeness, and database health checks before publication. An older source
+revision cannot replace newer local data, even within the same reporting period;
+use a separate database to explore an older snapshot.
+
+Downloads never silently switch sources. On an Open Data failure, the CLI exits
+with a suggested GitHub command; it does not start an interactive prompt.
+An installing agent should explain that fallback and obtain the user's source
+choice, or honor a source choice already provided. Report the chosen source and
+freshness after installation. If the requested snapshot has not been published,
+the GitHub path fails clearly; adding this option does not itself publish assets.
 
 ### Connect an MCP client
 
@@ -171,15 +206,27 @@ periods are separate: check both before interpreting freshness.
 ```bash
 uv run od-cpd status                    # local period, ingestion time and build
 uv run od-cpd status --check-upstream   # verify source revisions and complete periods
-uv run od-cpd update                    # refresh newer sources, or rebuild changed rules
+uv run od-cpd update                    # check revisions; fully reload if sources changed
+uv run od-cpd update --force            # fully reload even if revisions appear unchanged
+uv run od-cpd update --source github    # fully reload the selected GitHub snapshot
 uv run od-cpd rematerialize             # rebuild local raw data without downloading
 ```
+
+Every data refresh downloads **all four datasets in full** and rebuilds the
+database, including historical records. There is no incremental append: Open
+Data can backfill or correct older records. The default Open Data update checks
+source revisions first and skips downloading when unchanged; use `--force` to
+require a full refresh regardless. A GitHub update always downloads and rebuilds
+from the selected release (`--release TAG`, default `data-latest`). Refreshing a
+GitHub snapshot does not make it newer than the files its maintainer published.
 
 Refresh and rematerialization build in an isolated shadow, validate its inputs,
 then atomically replace the database. Before/after health reports remain under
 `var/ingest-runs/`; a failed build preserves the prior database and its diagnostics.
 Reconnect MCP clients after changing server code. See `docs/FEATURES.md` for
-snapshot scopes, source-coverage reconciliation and export provenance.
+snapshot scopes, source-coverage reconciliation and export provenance. `status`
+and MCP build provenance retain the download source and, for GitHub snapshots,
+the release and snapshot date, including after rematerialization.
 
 To keep it fresh automatically, schedule `update` (e.g. monthly via cron):
 
@@ -187,6 +234,28 @@ To keep it fresh automatically, schedule `update` (e.g. monthly via cron):
 # 9am on the 1st of each month
 0 9 1 * * cd /path/to/repo && uv run od-cpd update
 ```
+
+### Preparing GitHub snapshots (maintainers)
+
+```bash
+uv run od-cpd snapshot /path/to/new-snapshot-directory
+```
+
+The output directory must not already exist. This command downloads and
+validates all four lossless CSV exports and creates `manifest.json`, without
+touching the live database. Assets retain the exact bytes returned by the text
+projection export. The manifest marks this format as `socrata-text-v1` and records
+source URLs, metadata mappings, download dates, reporting periods, row counts,
+byte counts, and SHA-256 checksums. Ordinary website exports are not substitutes
+for these assets.
+
+Publish those five files together as assets of a dated GitHub release in this
+repository. Publishing is a separate maintainer action; the snapshot command
+does not create or upload a release. Optionally promote a complete, validated
+snapshot to the `data-latest` release. Never commit the generated CSVs to Git.
+Keep dated releases available for users who pin `--release TAG`, and publish the
+snapshot date and reporting periods in the release notes. Until a maintainer
+publishes a complete snapshot, the GitHub fallback is unavailable.
 
 ## What's inside
 

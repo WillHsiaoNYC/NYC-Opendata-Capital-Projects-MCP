@@ -46,3 +46,26 @@ def test_fingerprint_mismatch_never_creates_completed_marker():
         with pytest.raises(ValueError, match="rules changed during the build"):
             build_info.write_build_info(con, expected_fingerprint="before rules changed")
         assert con.execute("SHOW TABLES").fetchall() == []
+
+
+def test_rematerialization_preserves_download_provenance(tmp_path, monkeypatch):
+    import json
+    from od_cpd import ingest
+    path = tmp_path / 'build.duckdb'
+    seed_database(path)
+    download = {'source': 'github', 'release': 'data-test', 'downloaded_at': '2026-09-11T00:00:00Z',
+                'snapshot_downloaded_at': '2026-09-10T00:00:00Z', 'upstream_freshness': 'not_checked'}
+    with duckdb.connect(str(path)) as con:
+        con.execute('UPDATE data_build SET download=?', [json.dumps(download)])
+    monkeypatch.setenv('OD_CPD_DB', str(path))
+    ingest.run_rematerialize()
+    with connect_readonly(path) as con:
+        assert build_info.read_build_info(con)['download'] == download
+
+
+def test_legacy_build_without_download_column_is_readable(tmp_path):
+    path = tmp_path / 'legacy.duckdb'
+    seed_database(path)
+    with duckdb.connect(str(path)) as con:
+        con.execute('ALTER TABLE data_build DROP COLUMN download')
+        assert 'download' not in build_info.read_build_info(con)

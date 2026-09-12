@@ -5,7 +5,7 @@
 > and bump the "Last updated" date. This file is the canonical inventory of what
 > the server does and the rules it encodes.
 >
-> _Last updated: 2026-09-05_
+> _Last updated: 2026-09-11_
 
 The MCP serves NYC Capital Projects data (4 Socrata datasets) over a local DuckDB,
 with domain rules baked in so callers don't have to rediscover them.
@@ -325,6 +325,39 @@ These four raw datasets are normalized into the tables in §6.
   makes omitted observations inspectable, including wholly source-only PIDs.
   `dataset_info.available_periods` follows each independent typed source, not a shared
   dashboard period list.
+- **Download sources and full refresh:** `init` and `update` accept
+  `--source opendata|github` (default `opendata`). Open Data uses full Socrata v3
+  CSV exports with bounded retries and an explicit `column::text AS column`
+  projection for every native field. This preserves source values instead of
+  applying website export formatting or rounding to currency, percentages or
+  dates. Metadata validates fields and maps headers to internal names and order;
+  unknown, missing or ambiguous mappings fail validation. No user or agent header
+  editing is needed.
+  Every refresh reloads all four datasets and rebuilds historical and current
+  tables; there is no incremental append, so historical backfills and corrections
+  are included. Open Data `update` checks source revisions before downloading;
+  `update --force` requires a full refresh even when revisions are unchanged.
+  GitHub `update` always downloads and rebuilds from the selected snapshot.
+- **GitHub snapshot fallback:** `--source github --release TAG` selects release
+  assets in this repository. The default tag is `data-latest`, a maintainer-managed
+  data release, independent of the latest software release. Downloads pin immutable
+  asset IDs in this repository. The manifest requires `socrata-text-v1` and records
+  CSV asset names, checksums, byte/row counts, source metadata and header
+  mappings, provenance, download dates and reporting periods. GitHub ingestion
+  verifies the manifest and files without contacting Socrata, then uses the same
+  normalized raw-table and database health checks as live ingestion. Snapshot
+  freshness is reported; downloading a snapshot does not verify that Open Data
+  has not subsequently changed. Source failures never silently select another
+  source. The noninteractive CLI suggests an explicit fallback command instead.
+  Missing or incomplete releases fail clearly. An older source revision cannot
+  replace a newer local revision, even within the same reporting period; use a
+  separate database for an older snapshot.
+- **Snapshot preparation:** `od-cpd snapshot OUTPUT_DIRECTORY` requires a new
+  directory and preserves the exact lossless export bytes plus `manifest.json` without
+  touching the live database or publishing a release. Maintainers separately
+  publish all assets in a dated release and may promote a complete snapshot to
+  `data-latest`. CSVs remain release assets, outside Git history; the fallback
+  requires an actual published snapshot before users can download it.
 - **Atomic-swap ingest** (build a shadow DB, then atomically replace) so the live server
   never reads a half-built database. Publication requires a valid, checkpointed,
   closed shadow on the same filesystem. The live image must also be checkpointed
@@ -338,9 +371,10 @@ These four raw datasets are normalized into the tables in §6.
   DuckDB connections may retain that image until all old connections close.
 - **Ingest isolation and health:** a separate per-target OS lock covers the entire
   ingest/rematerialize operation, rejecting overlap before downloads. Each run owns
-  a unique directory and shadow. Every parsed CSV page must match the declared
-  header and row width; stable metadata revisions and source row counts bracket
-  downloading. Before materialization/publication, health checks validate counts,
+  a unique directory and shadow. Every parsed CSV must match its declared
+  header and row width. For live Open Data downloads, stable metadata revisions
+  and source row counts bracket downloading; GitHub downloads are checked against
+  the snapshot manifest and asset checksums. Before materialization/publication, health checks validate counts,
   required keys, duplicate declared source keys and reporting-period coverage,
   including disappeared prior snapshots and a partial newest snapshot. Original-budget
   adoption months remain separate. Different complete periods across sources are
@@ -361,14 +395,17 @@ These four raw datasets are normalized into the tables in §6.
   official NYC Open Data data-dictionary XLSX → the `column_dict` table, surfaced via
   `describe_field` and folded into `dataset_info`. Static/curated (re-extract by hand on a
   version bump — it revises ~yearly). A build/test guard (`dictionary_drift`) keeps the YAML
-  in sync with the table schema; an upstream source-schema change (including a column
-  REORDER, which `read_csv(columns=…)` would otherwise map positionally and silently
-  scramble) fails the ingest via the header-order assertion in `load_raw_csv`.
+  in sync with the table schema; an incompatible upstream source-schema change fails ingestion. Export columns
+  are explicitly mapped and reordered to the internal schema before loading; the
+  header-order assertion in `load_raw_csv` guards against positional scrambling.
 - **Reproducible answers:** query answers supply self-contained `reproduce_sql` and
   component SQL where a response uses several queries: portfolio rows/full summary/
   deduplicated budget, history snapshots/adoption headers/current state/links, and
   resolver totals. Every MCP success and export carries a completed `data_build`
-  identity, source revisions and reporting periods. Static catalog text identifies its
+  identity, source revisions and reporting periods. Optional `data_build.download`
+  JSON records the download source, release and snapshot date as applicable;
+  `status` and MCP build provenance expose it, and rematerialization preserves it.
+  Static catalog text identifies its
   curated source instead of claiming a SQL-only reproduction. Build identity hashes
   the schema, materialization code, curated resources and source revisions; a rule
   change is detectable independently of upstream timestamps.

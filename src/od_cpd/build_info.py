@@ -49,6 +49,7 @@ def write_build_info(con: duckdb.DuckDBPyConnection, *, expected_fingerprint: st
     fingerprint = current_fingerprint()
     if fingerprint != expected_fingerprint:
         raise ValueError("Materialization rules changed during the build; rebuild from stable inputs")
+    download = read_build_info(con).get("download")
     build_id = hashlib.sha256(
         f"{SCHEMA_VERSION}\n{fingerprint}\n{source_json}".encode()
     ).hexdigest()
@@ -62,9 +63,13 @@ def write_build_info(con: duckdb.DuckDBPyConnection, *, expected_fingerprint: st
             built_at TIMESTAMP NOT NULL
         )
     """)
+    con.execute("ALTER TABLE data_build ADD COLUMN IF NOT EXISTS download JSON")
     con.execute(
-        "INSERT OR REPLACE INTO data_build VALUES (TRUE, ?, ?, ?, ?, ?)",
-        [build_id, fingerprint, SCHEMA_VERSION, source_json, datetime.now(timezone.utc)],
+        "INSERT OR REPLACE INTO data_build "
+        "(singleton, build_id, materializer_fingerprint, schema_version, source_revisions, built_at, download) "
+        "VALUES (TRUE, ?, ?, ?, ?, ?, ?)",
+        [build_id, fingerprint, SCHEMA_VERSION, source_json, datetime.now(timezone.utc),
+         json.dumps(download) if download else None],
     )
     return read_build_info(con)
 
@@ -80,6 +85,13 @@ def read_build_info(con: duckdb.DuckDBPyConnection) -> dict:
         return {}
     if row is None:
         return {}
-    return {"build_id": row[0], "materializer_fingerprint": row[1],
+    result = {"build_id": row[0], "materializer_fingerprint": row[1],
             "schema_version": row[2], "source_revisions": json.loads(row[3]),
             "built_at": row[4].isoformat()}
+    try:
+        download = con.execute("SELECT download FROM data_build WHERE singleton").fetchone()[0]
+    except duckdb.BinderException:
+        download = None  # Existing schema-4 databases predate download provenance.
+    if download:
+        result["download"] = json.loads(download)
+    return result

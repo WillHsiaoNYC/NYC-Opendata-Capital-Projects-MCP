@@ -161,10 +161,10 @@ def test_download_reconciles_revision_and_counts_before_accepting(tmp_path, monk
     monkeypatch.setattr(socrata, "fetch_metadata", lambda ds: next(metadata))
     monkeypatch.setattr(socrata, "fetch_row_count", lambda ds: next(counts))
     def download(ds, path, **kwargs):
-        assert kwargs["expected_header"] == before.columns
+        assert kwargs["metadata"] == before
         path.write_text("synthetic diagnostic content")
         return 2 if defect == "missing_rows" else 3
-    monkeypatch.setattr(socrata, "download_csv", download)
+    monkeypatch.setattr(socrata, "download_export_csv", download)
     with pytest.raises(ValueError):
         ingest._download_dataset(ds, tmp_path)
     assert (tmp_path / f"{ds}.csv").exists()
@@ -307,3 +307,100 @@ def test_rules_changed_during_category_build_never_stamp_or_publish(target, monk
             0 if operation == "ingest" else 2,
         )
     assert reports(target)[0]["state"] == "failed"
+
+
+def test_github_full_rebuild_replaces_historical_values_and_preserves_count(target, monkeypatch):
+    from od_cpd import snapshots
+    seed_database(target)
+    fake_downloads(monkeypatch, alter=lambda table, rows: [
+        [('250' if column == 'total_budget' else value) for column, value in zip(schema.RAW_COLUMNS[table], row)]
+        for row in rows
+    ])
+    download = ingest._download_dataset
+    monkeypatch.setattr(snapshots, 'resolve_release', lambda tag: {'release_tag': tag})
+    monkeypatch.setattr(snapshots, 'download_dataset', lambda ds, directory, manifest: download(ds, directory))
+    monkeypatch.setattr(socrata, 'fetch_metadata', lambda ds: (_ for _ in ()).throw(AssertionError('live API call')))
+    assert ingest.run_ingest(source='github') == {ds: 36 for ds in DATASETS}
+    with connect_readonly(target) as con:
+        assert con.execute("SELECT count(*), min(total_budget), max(total_budget) FROM raw_project_detail").fetchone() == (36, '250', '250')
+        assert con.execute("SELECT count(*) FROM raw_project_detail WHERE reporting_period='202305' AND total_budget='250'").fetchone()[0] == 4
+    assert reports(target)[0]['source'] == 'github'
+
+
+def test_github_incomplete_input_cannot_replace_existing_database(target, monkeypatch):
+    from od_cpd import snapshots
+    seed_database(target)
+    before = target.read_bytes()
+    fake_downloads(monkeypatch)
+    download = ingest._download_dataset
+    monkeypatch.setattr(snapshots, 'resolve_release', lambda tag: {'release_tag': tag})
+    def partial(ds, directory, manifest):
+        if ds == '95tx-snak':
+            raise ValueError('snapshot SHA-256 mismatch')
+        return download(ds, directory)
+    monkeypatch.setattr(snapshots, 'download_dataset', partial)
+    with pytest.raises(ValueError, match='SHA-256'):
+        ingest.run_ingest(source='github')
+    assert target.read_bytes() == before
+    assert reports(target)[0]['state'] == 'failed'
+
+
+def test_snapshot_health_failure_never_writes_manifest_or_live_db(target, tmp_path, monkeypatch):
+    seed_database(target)
+    before = target.read_bytes()
+    fake_downloads(monkeypatch, alter=lambda table, rows: rows + [rows[0]])
+    output = tmp_path / 'bundle'
+    with pytest.raises(ValueError, match="duplicate source key"):
+        ingest.create_snapshot(output)
+    assert not (output / 'manifest.json').exists()
+    assert target.read_bytes() == before
+    with pytest.raises(FileExistsError):
+        ingest.create_snapshot(output)
+
+
+def test_older_snapshot_revision_cannot_replace_same_period_database(target, monkeypatch):
+    from od_cpd import snapshots
+    seed_database(target)
+    before = target.read_bytes()
+    fake_downloads(monkeypatch)
+    download = ingest._download_dataset
+    monkeypatch.setattr(snapshots, 'resolve_release', lambda tag: {'release_tag': tag})
+    def old(ds, directory, manifest):
+        meta, path, count = download(ds, directory)
+        return socrata.Metadata(99, meta.columns), path, count
+    monkeypatch.setattr(snapshots, 'download_dataset', old)
+    with pytest.raises(ValueError, match='predates the local database'):
+        ingest.run_ingest(source='github')
+    assert target.read_bytes() == before
+
+
+def test_prepare_snapshot_isolated_complete_bundle(target, tmp_path, monkeypatch):
+    from od_cpd import snapshots
+    seed_database(target)
+    before = target.read_bytes()
+    fake_downloads(monkeypatch)
+    download = ingest._download_dataset
+    def with_original(ds, directory):
+        meta, path, count = download(ds, directory)
+        path.with_suffix('.original.csv').write_bytes(path.read_bytes())
+        fields = schema.RAW_COLUMNS[schema.TABLE_FOR_DATASET[ds]]
+        return socrata.Metadata(meta.rows_updated_at, meta.columns, dict(zip(fields, fields))), path, count
+    monkeypatch.setattr(ingest, '_download_dataset', with_original)
+    output = tmp_path / 'snapshot'
+    manifest_path = ingest.create_snapshot(output)
+    manifest = json.loads(manifest_path.read_text())
+    snapshots.validate_manifest(manifest)
+    assert set(path.name for path in output.iterdir()) == {'manifest.json', *(f'{ds}.csv' for ds in DATASETS)}
+    assert {entry['row_count'] for entry in manifest['datasets'].values()} == {36}
+    assert len(manifest['datasets']['fb86-vt7u']['period_counts']) == 9
+    assert target.read_bytes() == before
+
+
+def test_projection_cannot_hide_upstream_schema_additions(tmp_path, monkeypatch):
+    ds = 'fb86-vt7u'
+    columns = schema.RAW_COLUMNS[schema.TABLE_FOR_DATASET[ds]] + ['new_source_field']
+    monkeypatch.setattr(socrata, 'fetch_metadata', lambda ds: socrata.Metadata(100, columns))
+    monkeypatch.setattr(socrata, 'fetch_row_count', lambda ds: (_ for _ in ()).throw(AssertionError('must reject before download')))
+    with pytest.raises(ValueError, match='source columns'):
+        ingest._download_dataset(ds, tmp_path)
+    assert not list(tmp_path.iterdir())

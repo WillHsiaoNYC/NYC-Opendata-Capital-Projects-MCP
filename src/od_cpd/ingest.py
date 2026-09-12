@@ -193,11 +193,13 @@ def _download_dataset(dataset_id: str, tmp: Path) -> tuple[socrata.Metadata, Pat
     before = socrata.fetch_metadata(dataset_id)
     if before.rows_updated_at <= 0:
         raise ValueError(f"{dataset_id}: source revision timestamp is unavailable")
+    fields = [field for field in before.columns if not field.startswith(":")]
+    expected = schema.RAW_COLUMNS[schema.TABLE_FOR_DATASET[dataset_id]]
+    if len(fields) != len(set(fields)) or set(fields) != set(expected):
+        raise ValueError(f"{dataset_id}: source columns do not match the supported schema")
     count_before = socrata.fetch_row_count(dataset_id)
     csv_path = tmp / f"{dataset_id}.csv"
-    count_downloaded = socrata.download_csv(
-        dataset_id, csv_path, expected_header=schema.RAW_COLUMNS[schema.TABLE_FOR_DATASET[dataset_id]]
-    )
+    count_downloaded = socrata.download_export_csv(dataset_id, csv_path, metadata=before)
     count_after = socrata.fetch_row_count(dataset_id)
     after = socrata.fetch_metadata(dataset_id)
     if before != after:
@@ -290,7 +292,11 @@ def _local_health(final: Path) -> dict:
         return {}
     with connect_readonly(final) as con:
         try:
-            return source_health(con)
+            health = source_health(con)
+            revisions = dict(con.execute("SELECT dataset_id, rows_updated_at FROM meta").fetchall())
+            for ds, info in health["datasets"].items():
+                info["rows_updated_at"] = revisions.get(ds)
+            return health
         except (duckdb.Error, ValueError) as exc:
             return {"warnings": [f"Prior source health unavailable: {exc}"]}
 
@@ -347,20 +353,34 @@ def _completed_health(con: duckdb.DuckDBPyConnection, health: dict) -> dict:
     return health
 
 
-def run_ingest() -> dict:
+def run_ingest(*, source: str = "opendata", release: str = "data-latest", on_snapshot=None) -> dict:
     """Validate stable full downloads, build in isolation, then publish once."""
+    from . import snapshots
+
+    if source not in {"opendata", "github"}:
+        raise ValueError("source must be opendata or github")
     final = db_path().resolve()
     final.parent.mkdir(parents=True, exist_ok=True)
     with _target_lock(final, "ingest"):
+        manifest = snapshots.resolve_release(release) if source == "github" else None
+        if manifest is not None and on_snapshot is not None:
+            on_snapshot(manifest)
         directory = _run_directory(final, "ingest")
         shadow = directory / "shadow.duckdb"
         report = {"operation": "ingest", "started_at": datetime.now(timezone.utc),
-                  "state": "downloading", "before": _local_health(final)}
+                  "state": "downloading", "before": _local_health(final),
+                  "source": source, "snapshot": manifest}
         _write_report(directory, report)
         try:
             with ThreadPoolExecutor(max_workers=len(DATASETS)) as ex:
                 downloads = dict(zip(DATASETS, ex.map(
-                    lambda ds: _download_dataset(ds, directory), DATASETS)))
+                    lambda ds: (snapshots.download_dataset(ds, directory, manifest)
+                                if manifest is not None else _download_dataset(ds, directory)), DATASETS)))
+            for ds, (meta, _path, _count) in downloads.items():
+                prior_revision = report["before"].get("datasets", {}).get(ds, {}).get("rows_updated_at")
+                if prior_revision and meta.rows_updated_at < prior_revision:
+                    raise ValueError(f"{ds}: selected source revision predates the local database; "
+                                     "use a newer snapshot or initialize a separate database")
             report["state"] = "building"
             with duckdb.connect(str(shadow)) as con:
                 schema.apply_schema(con)
@@ -373,6 +393,12 @@ def run_ingest() -> dict:
                                        previous=report["before"])
                 build_agency_dim(con)
                 materialize.materialize_all(con)
+                download_info = {"source": source, "downloaded_at": str(report["started_at"])}
+                if manifest is not None:
+                    download_info.update(release=manifest["release_tag"],
+                                         snapshot_downloaded_at=manifest.get("downloaded_at"),
+                                         upstream_freshness="not_checked")
+                con.execute("UPDATE data_build SET download=? WHERE singleton", [json.dumps(download_info)])
                 con.execute("UPDATE meta SET ingest_completed_at=?", [datetime.now(timezone.utc)])
                 report["after"] = _completed_health(con, health)
             report["state"] = "ready_to_publish"
@@ -383,8 +409,27 @@ def run_ingest() -> dict:
             _write_report(directory, report)
             exc.add_note(f"Ingest diagnostics retained at {directory}")
             raise
-        _finish_publication(directory, report, (item[1] for item in downloads.values()))
+        files = {path for ds, item in downloads.items()
+                 for path in (item[1], item[1].with_suffix('.original.csv'), directory / f"{ds}.csv")}
+        _finish_publication(directory, report, sorted(path for path in files if path.exists()))
         return summary
+
+
+def create_snapshot(output: Path) -> Path:
+    """Stage a complete validated release bundle; never publish or touch the live DB."""
+    from . import snapshots
+
+    output.mkdir(parents=True, exist_ok=False)
+    # A failed preparation never creates a manifest or replaces an existing bundle.
+    with tempfile.TemporaryDirectory(prefix="prepare-", dir=output) as staging:
+        with ThreadPoolExecutor(max_workers=len(DATASETS)) as ex:
+            downloads = dict(zip(DATASETS, ex.map(lambda ds: _download_dataset(ds, Path(staging)), DATASETS)))
+        with duckdb.connect(":memory:") as con:
+            schema.apply_schema(con)
+            for ds, (_meta, path, _count) in downloads.items():
+                load_raw_csv(con, schema.TABLE_FOR_DATASET[ds], path)
+            source_health(con, expected_counts={ds: item[2] for ds, item in downloads.items()})
+        return snapshots.write_manifest(output, downloads)
 
 
 def run_rematerialize() -> dict:
