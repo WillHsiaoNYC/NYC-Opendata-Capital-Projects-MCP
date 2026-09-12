@@ -120,3 +120,128 @@ def test_download_keeps_page_records_separate_without_final_newline(tmp_path):
         assert socrata.download_csv("fb86-vt7u", out, page_size=1, client=client) == 2
     with out.open(newline="") as stream:
         assert list(csv.reader(stream)) == [["a", "b"], ["1", "2"], ["3", "4"]]
+
+
+def _export_fixture(monkeypatch):
+    monkeypatch.setitem(socrata.schema.RAW_COLUMNS, "raw_project_detail", ["reporting_period", "pid"])
+    return socrata.Metadata(123, ["reporting_period", "pid"],
+                            {"Reporting Period": "reporting_period", "Project ID": "pid"})
+
+
+def test_export_normalizes_order_and_preserves_original_values(tmp_path, monkeypatch):
+    metadata = _export_fixture(monkeypatch)
+    body = b'\xef\xbb\xbfProject ID,Reporting Period\r\n"001, abc\n def",202609\r\n'
+    def handler(request):
+        assert request.url.path == "/api/v3/views/fb86-vt7u/export.csv"
+        assert request.url.params["query"] == "SELECT reporting_period::text AS reporting_period, pid::text AS pid"
+        return httpx.Response(200, content=body)
+    output = tmp_path / "data.csv"
+    with _client(handler) as client:
+        assert socrata.download_export_csv("fb86-vt7u", output, metadata=metadata, client=client) == 1
+    assert output.with_suffix('.original.csv').read_bytes() == body
+    with output.open(newline="") as stream:
+        assert list(csv.reader(stream)) == [["reporting_period", "pid"], ["202609", "001, abc\n def"]]
+
+
+@pytest.mark.parametrize("body", [
+    "Reporting Period,Project ID,Extra\n202609,1,2\n",
+    "Reporting Period\n202609\n",
+    "Reporting Period,Reporting Period\n202609,1\n",
+    "Reporting Period,pid,Project ID\n202609,1,2\n",
+    "Reporting Period,Project ID\n202609,1,2\n",
+    'Reporting Period,Project ID\n202609,"unterminated',
+    "",
+])
+def test_export_rejects_invalid_headers_and_rows(tmp_path, monkeypatch, body):
+    metadata = _export_fixture(monkeypatch)
+    with _client(lambda request: httpx.Response(200, text=body)) as client:
+        with pytest.raises((ValueError, csv.Error)):
+            socrata.download_export_csv("fb86-vt7u", tmp_path / "data.csv", metadata=metadata, client=client)
+
+
+def test_export_accepts_native_headers(tmp_path, monkeypatch):
+    metadata = _export_fixture(monkeypatch)
+    with _client(lambda request: httpx.Response(200, text="pid,reporting_period\n001,202609\n")) as client:
+        assert socrata.download_export_csv("fb86-vt7u", tmp_path / "data.csv", metadata=metadata, client=client) == 1
+
+
+def test_export_rejects_ambiguous_display_and_native_name(tmp_path, monkeypatch):
+    _export_fixture(monkeypatch)
+    metadata = socrata.Metadata(123, ["reporting_period", "pid"], {"pid": "reporting_period"})
+    with _client(lambda request: httpx.Response(200, text="pid,reporting_period\n001,202609\n")) as client:
+        with pytest.raises(ValueError, match="ambiguous"):
+            socrata.download_export_csv("fb86-vt7u", tmp_path / "data.csv", metadata=metadata, client=client)
+
+
+@pytest.mark.parametrize("status", [429, 500, 502, 503, 504])
+def test_metadata_retries_transient_errors(monkeypatch, status):
+    monkeypatch.setattr(socrata.time, "sleep", lambda seconds: None)
+    responses = iter([status, status, 200])
+    with _client(lambda request: httpx.Response(next(responses), json={"columns": []})) as client:
+        assert socrata.fetch_metadata("fb86-vt7u", client=client).columns == []
+
+
+def test_export_retries_interrupted_transfer_from_beginning(tmp_path, monkeypatch):
+    metadata = _export_fixture(monkeypatch)
+    monkeypatch.setattr(socrata.time, "sleep", lambda seconds: None)
+    class Interrupted(httpx.SyncByteStream):
+        def __iter__(self):
+            yield b"PARTIAL DOWNLOAD"
+            raise httpx.ReadError("interrupted")
+    responses = iter([httpx.Response(200, stream=Interrupted()),
+                      httpx.Response(200, text="pid,reporting_period\n001,202609\n")])
+    output = tmp_path / "data.csv"
+    with _client(lambda request: next(responses)) as client:
+        assert socrata.download_export_csv("fb86-vt7u", output, metadata=metadata, client=client) == 1
+    assert output.with_suffix('.original.csv').read_text() == "pid,reporting_period\n001,202609\n"
+
+
+@pytest.mark.parametrize("status,expected_calls", [(503, 3), (403, 1), (404, 1)])
+def test_export_retry_is_bounded(tmp_path, monkeypatch, status, expected_calls):
+    metadata = _export_fixture(monkeypatch)
+    monkeypatch.setattr(socrata.time, "sleep", lambda seconds: None)
+    calls = []
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(status)
+    with _client(handler) as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            socrata.download_export_csv("fb86-vt7u", tmp_path / "data.csv", metadata=metadata, client=client)
+    assert len(calls) == expected_calls
+
+
+def test_metadata_maps_display_headers_excluding_system_columns():
+    data = {"columns": [{"fieldName": ":id", "name": "ID"},
+                        {"fieldName": "pid", "name": "Project ID"}]}
+    with _client(lambda request: httpx.Response(200, json=data)) as client:
+        meta = socrata.fetch_metadata("fb86-vt7u", client=client)
+    assert meta.columns == [":id", "pid"]
+    assert meta.export_headers == {"Project ID": "pid"}
+
+
+def test_metadata_rejects_duplicate_display_labels():
+    data = {"columns": [{"fieldName": "pid", "name": "ID"},
+                        {"fieldName": "fms_id", "name": "ID"}]}
+    with _client(lambda request: httpx.Response(200, json=data)) as client:
+        with pytest.raises(ValueError, match="duplicate export column label"):
+            socrata.fetch_metadata("fb86-vt7u", client=client)
+
+
+def test_full_export_query_preserves_precision_dates_and_empty_values(tmp_path, monkeypatch):
+    fields = ["total_budget", "spend_to_date_1", "fms_data_date", "agency_project_name"]
+    monkeypatch.setitem(socrata.schema.RAW_COLUMNS, "raw_project_detail", fields)
+    metadata = socrata.Metadata(123, fields)
+    body = ("total_budget,spend_to_date_1,fms_data_date,agency_project_name\n"
+            '173058.01,0.4221,2023-05-11T14:15:16.123,""\n'
+            "-0.000000001,1.23456789,,literal text\n")
+    def handler(request):
+        assert request.method == "GET"
+        assert request.url.params["query"] == "SELECT " + ", ".join(
+            f"{field}::text AS {field}" for field in fields)
+        assert "LIMIT" not in request.url.params["query"]
+        return httpx.Response(200, text=body)
+    output = tmp_path / "data.csv"
+    with _client(handler) as client:
+        assert socrata.download_export_csv("fb86-vt7u", output, metadata=metadata, client=client) == 2
+    with output.open(newline="") as stream:
+        assert list(csv.reader(stream)) == list(csv.reader(io.StringIO(body)))

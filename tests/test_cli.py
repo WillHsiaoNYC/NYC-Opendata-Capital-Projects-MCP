@@ -95,3 +95,45 @@ def test_update_rematerializes_changed_rules_without_download(tmp_path, monkeypa
     assert result.exit_code == 0
     assert calls == ["rematerialize"]
     assert "without downloading" in result.stdout
+
+
+def test_github_source_bypasses_live_revision_check(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, 'fetch_metadata', lambda ds: (_ for _ in ()).throw(AssertionError('live request')))
+    monkeypatch.setattr(cli, 'run_ingest', lambda **kwargs: calls.append(kwargs) or {})
+    result = runner.invoke(app, ['update', '--source', 'github', '--release', 'data-2026-09-11'])
+    assert result.exit_code == 0
+    assert calls[0]['source'] == 'github'
+    assert calls[0]['release'] == 'data-2026-09-11'
+
+
+def test_force_refresh_bypasses_revision_shortcut(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, 'fetch_metadata', lambda ds: (_ for _ in ()).throw(AssertionError('revision shortcut')))
+    monkeypatch.setattr(cli, 'run_ingest', lambda: calls.append('full') or {})
+    assert runner.invoke(app, ['update', '--force']).exit_code == 0
+    assert calls == ['full']
+
+
+def test_download_error_suggests_but_does_not_select_github(monkeypatch):
+    calls = []
+    def fail(**kwargs):
+        calls.append(kwargs)
+        raise httpx.ConnectError('unavailable')
+    monkeypatch.setattr(cli, 'run_ingest', fail)
+    result = runner.invoke(app, ['init'])
+    assert result.exit_code == 1
+    assert '--source github' in result.output
+    assert calls == [{}]
+
+
+def test_snapshot_output_shows_age_and_periods():
+    import contextlib
+    import io
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        cli._show_snapshot({'release_tag': 'data-test', 'downloaded_at': '2026-09-11T00:00:00Z',
+                            'datasets': {'fb86-vt7u': {'period_counts': {'202601': 5}}}})
+    assert '2026-09-11' in output.getvalue()
+    assert '202601' in output.getvalue()
+    assert 'freshness has not been checked' in output.getvalue()

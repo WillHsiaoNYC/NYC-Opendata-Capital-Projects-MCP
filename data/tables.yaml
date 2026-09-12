@@ -94,8 +94,10 @@ data_build:
   grain: one singleton row per completed data build
   description: >-
     Completed schema version, materializer and dictionary fingerprint, public
-    source revisions, build timestamp and deterministic build ID. A fingerprint
-    change is detected by status and applied with od-cpd rematerialize.
+    source revisions, build timestamp and deterministic build ID. Optional download
+    JSON records the download source and, for GitHub snapshots, release and snapshot
+    date; rematerialization preserves it. A fingerprint change is detected by status
+    and applied with od-cpd rematerialize.
 
 budget_history:
   kind: analytics
