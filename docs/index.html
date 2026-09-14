@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NYC Capital Projects — Report Gallery · OD-CPD MCP</title>
-<meta name="description" content="Three interactive analyses of New York City's capital portfolio, each generated from a single prompt to the OD-CPD MCP server.">
+<meta name="description" content="Four interactive analyses of New York City's capital portfolio, each generated from a single prompt to the OD-CPD MCP server.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,900&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -127,10 +127,10 @@ header .meta span b{color:var(--cyan);font-weight:500}
 .plate .tagblk .v{font-size:10px;color:var(--muted);letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* content cell */
-.plate .body{padding:34px 36px 30px;display:flex;flex-direction:column}
+.plate .body{padding:34px 36px 64px;display:flex;flex-direction:column}
 .plate .eyebrow{font-size:11px;letter-spacing:.26em;text-transform:uppercase;font-weight:500;margin-bottom:14px}
 .plate.t1 .eyebrow,.plate.t3 .eyebrow{color:var(--cyan)}
-.plate.t2 .eyebrow{color:var(--amber)}
+.plate.t2 .eyebrow,.plate.t4 .eyebrow{color:var(--amber)}
 .plate h2{font-family:"Fraunces",serif;font-weight:500;font-size:clamp(24px,3.4vw,33px);line-height:1.05;letter-spacing:-.01em}
 .plate .tagline{font-family:"Fraunces",serif;font-style:italic;font-weight:300;color:var(--muted);font-size:16px;margin-top:8px}
 .plate p.desc{color:var(--muted);font-size:13.5px;margin-top:18px;max-width:54ch}
@@ -138,13 +138,13 @@ header .meta span b{color:var(--cyan);font-weight:500}
 .plate .open{margin-top:auto;padding-top:24px;display:inline-flex;align-items:center;gap:10px;
   font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--paper)}
 .plate .open .arw{transition:transform .3s;color:var(--cyan)}
-.plate.t2 .open .arw{color:var(--amber)}
+.plate.t2 .open .arw,.plate.t4 .open .arw{color:var(--amber)}
 .plate:hover .open .arw{transform:translateX(6px)}
 
 @media(max-width:760px){
   .plate{grid-template-columns:1fr}
   .plate .glyph{border-right:0;border-bottom:1px solid var(--panel-edge);min-height:210px}
-  .plate .body{padding:28px 24px 26px}
+  .plate .body{padding:28px 24px 64px}
 }
 
 /* ---------- footer ---------- */
@@ -180,21 +180,61 @@ footer .colo{margin-top:30px;font-size:11px;color:var(--faint);line-height:1.7}
   <header>
     <div class="eyebrow"><span class="rule"></span><span class="kicker">NYC Capital Projects · Open Data</span></div>
     <h1 class="display">One prompt,<br><span class="l2">one report.</span></h1>
-    <p class="sub">Three interactive analyses of New York City's capital portfolio — each generated from a <em>single prompt</em> to the OD-CPD MCP server, with the domain rules (PID↔FMS many-to-many, role-aware agency attribution, signed variance) already baked in.</p>
+    <p class="sub">Four interactive analyses of New York City's capital portfolio — each generated from a <em>single prompt</em> to the OD-CPD MCP server, with the domain rules (PID↔FMS many-to-many, role-aware agency attribution, signed variance) already baked in.</p>
     <div class="meta">
       <span>Source · <b>NYC Open Data</b></span>
       <span>4 Socrata sets → <b>DuckDB</b></span>
       <span>Served over <b>MCP</b></span>
-      <span>Period · <b>202601</b></span>
+      <span>Snapshots · <b>202601–202605</b></span>
     </div>
-    <div class="scrollcue"><span class="ln"></span>Three sheets below</div>
+    <div class="scrollcue"><span class="ln"></span>Four sheets below</div>
   </header>
 
   <!-- GALLERY -->
   <main class="gallery">
 
     <!-- PLATE 1 -->
-    <a class="plate t1 reveal" href="examples/pid_fms_budget_analysis.html">
+    <a class="plate t1 reveal" href="examples/capital_projects_dataset_overview.html">
+      <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+      <div class="glyph">
+        <svg viewBox="0 0 240 200" role="img" aria-label="Four source tables flowing into schedule, budget, and agency overview metrics">
+          <g fill="none" stroke="#56708f" stroke-width="1.3" opacity=".65">
+            <path d="M38 38 C82 38 83 72 116 72"/><path d="M38 68 C82 68 83 72 116 72"/>
+            <path d="M38 128 C82 128 83 116 116 116"/><path d="M38 158 C82 158 83 116 116 116"/>
+          </g>
+          <g fill="#0A0E17" stroke="#4FD2E8" stroke-width="1.8">
+            <rect x="25" y="30" width="26" height="16" rx="2"/><rect x="25" y="60" width="26" height="16" rx="2"/>
+          </g>
+          <g fill="#0A0E17" stroke="#F4A340" stroke-width="1.8">
+            <rect x="25" y="120" width="26" height="16" rx="2"/><rect x="25" y="150" width="26" height="16" rx="2"/>
+          </g>
+          <circle cx="120" cy="72" r="13" fill="#0A0E17" stroke="#4FD2E8" stroke-width="2"/>
+          <circle cx="120" cy="116" r="13" fill="#0A0E17" stroke="#F4A340" stroke-width="2"/>
+          <g stroke-width="2" stroke-linecap="round">
+            <line x1="134" y1="72" x2="204" y2="48" stroke="#4FD2E8"/><line x1="134" y1="116" x2="204" y2="140" stroke="#F4A340"/>
+            <line x1="133" y1="94" x2="204" y2="94" stroke="#8A93A8"/>
+          </g>
+          <g fill="#E9E6DC" font-family="JetBrains Mono, monospace" font-size="10" text-anchor="end">
+            <text x="218" y="51">SCHEDULE</text><text x="218" y="97">AGENCIES</text><text x="218" y="143">BUDGET</text>
+          </g>
+        </svg>
+      </div>
+      <div class="body">
+        <span class="eyebrow">Dataset field guide</span>
+        <h2>NYC capital projects overview</h2>
+        <div class="tagline">a first look at what the data covers</div>
+        <p class="desc">A nine-slide introduction to schedule and budget units, reporting coverage, lifecycle mix, budget and spend, agency roles, and <b>22 category buckets</b>.</p>
+        <span class="open">Open presentation <span class="arw">→</span></span>
+      </div>
+      <div class="tagblk">
+        <div><span class="k">Drawing</span><span class="v">dataset_overview</span></div>
+        <div><span class="k">Period</span><span class="v">202605</span></div>
+        <div><span class="k">Source</span><span class="v">NYC OpenData</span></div>
+      </div>
+    </a>
+
+    <!-- PLATE 2 -->
+    <a class="plate t2 reveal" href="examples/pid_fms_budget_analysis.html">
       <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
       <div class="glyph">
         <svg viewBox="0 0 240 200" role="img" aria-label="Bipartite fan-out diagram: one schedule funded by many budget lines">
@@ -233,8 +273,8 @@ footer .colo{margin-top:30px;font-size:11px;color:var(--faint);line-height:1.7}
       </div>
     </a>
 
-    <!-- PLATE 2 -->
-    <a class="plate t2 reveal" href="examples/parks_over_50m.html">
+    <!-- PLATE 3 -->
+    <a class="plate t3 reveal" href="examples/parks_over_50m.html">
       <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
       <div class="glyph">
         <svg viewBox="0 0 240 200" role="img" aria-label="Budget concentration bars with linked schedule markers">
@@ -265,8 +305,8 @@ footer .colo{margin-top:30px;font-size:11px;color:var(--faint);line-height:1.7}
       </div>
     </a>
 
-    <!-- PLATE 3 -->
-    <a class="plate t3 reveal" href="examples/cpd_budget_schedule_change_monitor.html">
+    <!-- PLATE 4 -->
+    <a class="plate t4 reveal" href="examples/cpd_budget_schedule_change_monitor.html">
       <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
       <div class="glyph">
         <svg viewBox="0 0 240 200" role="img" aria-label="Variance trend line with per-period delta bars">
@@ -310,7 +350,7 @@ footer .colo{margin-top:30px;font-size:11px;color:var(--faint);line-height:1.7}
         <h4>About</h4>
         Each report is a single self-contained HTML file, generated from one prompt to the
         <a href="https://github.com/WillHsiaoNYC/NYC-Opendata-Capital-Projects-MCP" target="_blank" rel="noopener">OD-CPD MCP server</a>
-        and lightly polished. Figures are a snapshot of reporting period 202601.
+        and lightly polished. The overview uses reporting period 202605; the other reports use 202601.
       </div>
       <div>
         <span class="lbl">Data</span>

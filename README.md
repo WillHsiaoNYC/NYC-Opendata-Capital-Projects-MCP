@@ -39,9 +39,17 @@ sourced, and reproducible.
 
 This isn't only a query tool. Point an AI agent at it and **a single prompt produces a
 polished, self-contained interactive HTML report** — with the domain rules already applied.
-Three real examples (one prompt → one file; click to open the live report):
+Four real examples (one prompt → one file; click to open the live report):
 
-**1 · Schedule ↔ Budget topology** — *the many-to-many anatomy of the portfolio*
+**1 · NYC capital projects overview** — *a first-timer's field guide to the dataset*
+
+> Use this MCP to create a general overview of project schedule/budget and agency count
+> for first-timer to quickly understand the coverage of the dataset, in an html file for
+> presentation.
+
+▶ **[Open the presentation](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/examples/capital_projects_dataset_overview.html)** — a nine-slide introduction to the dataset's schedule and budget units, reporting coverage, lifecycle mix, budget and spend, agency roles, and category coverage.
+
+**2 · Schedule ↔ Budget topology** — *the many-to-many anatomy of the portfolio*
 
 > Analyze the schedule and budget many-to-many relationship across NYC capital projects and
 > build a single interactive HTML report — the 1:1-vs-fan-out split, the outlier extremes, a
@@ -49,14 +57,14 @@ Three real examples (one prompt → one file; click to open the live report):
 
 ▶ **[Open the report](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/examples/pid_fms_budget_analysis.html)** — fan-out rings, a bipartite diagram, the "tangled few" outliers (hover to see the real schedules and budget lines), an agency scatter, and a budget concentration curve.
 
-**2 · Parks projects over $50M** — *every big build, and what funds it*
+**3 · Parks projects over $50M** — *every big build, and what funds it*
 
 > Build an interactive one-file HTML report on NYC Parks projects over $50M. For each
 > budget line, show every schedule associated with it, with phase and forecast completion.
 
 ▶ **[Open the report](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/examples/parks_over_50m.html)** — 23 budget lines; hover any to reveal its linked schedules. Quietly applies the category taxonomy, so the $1.9B "Park Pedestrian Bridges" route to Bridges, not Parks.
 
-**3 · Budget & schedule change monitor** — *what moved this period, by agency*
+**4 · Budget & schedule change monitor** — *what moved this period, by agency*
 
 > Build an interactive one-file HTML monitor of NYC capital projects' budget and schedule
 > changes by managing agency, with a click-through detail view for each project's schedule
@@ -64,8 +72,8 @@ Three real examples (one prompt → one file; click to open the live report):
 
 ▶ **[Open the report](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/examples/cpd_budget_schedule_change_monitor.html)** — KPIs, a trend chart, a sortable watchlist, and a per-project popup with schedule-variance bars and a stacked budget-vs-spend chart.
 
-> Each report was generated from the prompt shown, then lightly polished. The figures are a
-> snapshot of reporting period 202601 — browse all three in the [report gallery](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/).
+> Each report was generated from the prompt shown, then lightly polished. The overview uses
+> reporting period 202605; the other three use 202601. Browse all four in the [report gallery](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/).
 
 ## 🚀 Quick Start
 
