@@ -1,5 +1,7 @@
 # Fordham University class reports
 
+**[Browse all class reports](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/examples/Fordham%20University/)** — a dated index with links to open or download each report.
+
 Open the reports below in a browser, or download their HTML files for offline reading. Each file includes its styles, fonts, and report data. The typology discussion also includes its two downloadable 2025 Word source documents.
 
 Filenames begin with the class date (`YYYY-MM-DD`). The comparison reports' `202505` suffix is their May 2025 data cutoff, not the class date.
@@ -11,3 +13,5 @@ Filenames begin with the class date (`YYYY-MM-DD`). The comparison reports' `202
 | October 2, 2026 | Typology prompts, answers, and recommendations | [Open report](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/examples/Fordham%20University/2026-10-02_typology_discussion_2026.html) | [Download](./2026-10-02_typology_discussion_2026.html) |
 
 The DDC and DPR reports preserve the original requests and reviewed PID-level comparisons with the supplied 2025 masterlists. The typology report preserves two prompts and answers; its recommendations are a proposal for class discussion. These reports do not change the MCP's built-in classification rules or the original masterlists.
+
+When adding a report, update both `index.html` and this table. GitHub Pages serves `index.html` at the folder URL; it does not generate a directory listing from this README.

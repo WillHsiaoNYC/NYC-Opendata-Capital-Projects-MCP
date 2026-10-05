@@ -75,6 +75,8 @@ Four real examples (one prompt → one file; click to open the live report):
 > Each report was generated from the prompt shown, then lightly polished. The overview uses
 > reporting period 202605; the other three use 202601. Browse all four in the [report gallery](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/).
 
+The **[Fordham University class reports](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/examples/Fordham%20University/)** have a separate index organized by class date, with links to view or download each report.
+
 ## 🚀 Quick Start
 
 Want the data without the setup? If your AI can run commands on your computer,
