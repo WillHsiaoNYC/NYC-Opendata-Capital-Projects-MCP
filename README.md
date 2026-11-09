@@ -75,7 +75,7 @@ Four real examples (one prompt → one file; click to open the live report):
 > Each report was generated from the prompt shown, then lightly polished. The overview uses
 > reporting period 202605; the other three use 202601. Browse all four in the [report gallery](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/).
 
-The **[Fordham University class reports](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/examples/Fordham%20University/)** have a separate index organized by class date, with links to view or download each report.
+The **[Fordham University class reports and data tools](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/examples/Fordham%20University/)** have a separate index with report links and a **[historical CPD MCP installation guide](https://willhsiaonyc.github.io/NYC-Opendata-Capital-Projects-MCP/examples/Fordham%20University/pre2023-mcp/)**. The historical code-only package uses the course Excel supplied separately to students; its legacy PIDs are distinct from the current MCP’s IDs.
 
 ## 🚀 Quick Start
 
