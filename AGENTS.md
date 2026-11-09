@@ -96,3 +96,10 @@ not reach agents that connect only through MCP.
    change. Verify the affected behavior and protocol contracts. Reconnect stdio
    clients to load code changes; rematerialize only when stored data logic changed,
    using the documented atomic publication workflow.
+
+
+## Fordham historical MCP download
+
+- `docs/examples/Fordham University/pre2023-mcp/` contains the separate historical MCP checksum, installation page, README, agent prompt, dictionary and verification notes. Its code-only ZIP is a versioned GitHub release asset linked from the page; keep binary archives out of Git history. It is an independent eight-tool MCP, not an addition to the current server's tool inventory.
+- Never publish the course Excel, a generated SQLite database, real-data fixtures/exports or the older data-bundled ZIP. Students import their separately supplied local workbook. Preserve the legacy/current identifier distinction and tested-platform limitations.
+- Keep the parent Fordham index and README listing in sync with versioned downloads and instructions. The verified authoring source is the sibling private Fordham repository's code-only package and student-site builder; copy only its authorized public output. Before publication, audit archive members, checksum and runtime equivalence; preserve existing report files/links. Verify the live Pages installation flow, prompt and downloaded ZIP after deployment. Use CLI for all GitHub operations and ego-browser for Pages visual checks.

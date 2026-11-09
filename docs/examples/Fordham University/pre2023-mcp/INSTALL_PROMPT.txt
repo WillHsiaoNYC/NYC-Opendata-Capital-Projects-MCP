@@ -1,0 +1,13 @@
+Install and configure the historical NYC Capital Projects MCP (cpd-pre2023) on my computer using the code-only package accompanying this prompt. If I provided a published course installation-page URL, read it and download its documented, versioned code-only ZIP and checksum. If I provided an extracted package folder, read its README.md directly. If neither is available, ask where the code-only package is. Do not substitute the old release containing data.
+
+The historical Excel workbook supplied for my course is already saved locally. Ask me for its full local path if I have not provided it. Identify the MCP client I want to use; ask if unclear. Do not ask me to upload the workbook or attach it to chat.
+
+Read the package README before running commands. Verify the ZIP checksum when available, extract the code to a permanent location, and install its locked dependencies in its isolated environment with uv sync --locked --no-dev --python 3.12. Preserve existing MCP connections, especially the current CPD MCP.
+
+Choose a separate private local data folder outside the code checkout. Use the environment's Python to run the documented setup --workbook command with my Excel path and --data-dir. Setup must validate the approved workbook identity and preserve the original. Do not modify, rename or move it, bypass a failed hash/schema check, or invent another transformation. If the workbook does not match, explain the difference and stop. Preserve existing databases; reuse only a verified matching import or choose a new private folder. Do not upload the workbook, generated database or data exports to GitHub or external storage.
+
+Run verify, smoke-test and config using that same --data-dir. Confirm 7,230 observations, 1,012 legacy PIDs and 24 reporting periods from September 2013 through January 2023. Use the generated absolute environment interpreter path, server arguments and CPD_PRE2023_DATA_DIR setting. Register only the cpd-pre2023 entry using my client's supported configuration mechanism, backing up a configuration before a manual merge and preserving unrelated settings. Inspect an existing entry before changing it.
+
+After any required client reload, call pre2023_dataset_info through that client. Command-line tests alone do not establish client registration. Historical and current PIDs use separate identifier systems; never join them automatically.
+
+Report the installed code version, code and private database locations, workbook path, verification results and whether the client connection was actually verified. State any remaining restart or manual step clearly. Keep source records out of the installation summary. Do not publish this package or its data as part of installation.
